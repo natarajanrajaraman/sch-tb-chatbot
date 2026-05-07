@@ -1,6 +1,8 @@
 import { SYMPTOM_QUESTIONS, RESPONSE_OPTIONS } from '@/data/questions';
 import { BOT_MESSAGES } from '@/data/messages';
 
+export const BOT_VERSION = '0.2.0';
+
 export type ConversationState =
   | 'WELCOME'
   | 'ASK_AGE'
@@ -58,6 +60,7 @@ export interface SessionData {
   referralSitesShown?: string[];
   status: 'in_progress' | 'completed' | 'abandoned';
   under15Excluded: boolean;
+  botVersion: string;
 }
 
 export function generateId(): string {
@@ -74,6 +77,7 @@ export function createInitialSession(platformView: string): SessionData {
     symptoms: {},
     status: 'in_progress',
     under15Excluded: false,
+    botVersion: BOT_VERSION,
   };
 }
 

@@ -88,6 +88,7 @@ export interface SessionRow {
   referralSitesShown: string;
   status: string;
   under15Excluded: string;
+  botVersion: string;
 }
 
 export async function saveSession(session: SessionRow): Promise<void> {
@@ -116,6 +117,7 @@ export async function saveSession(session: SessionRow): Promise<void> {
     session.referralSitesShown || '',
     session.status,
     session.under15Excluded,
+    session.botVersion || '',
   ];
 
   await appendToSheet('Sessions', [row]);
@@ -139,7 +141,7 @@ export async function saveReferralLog(
 
 export async function getAllSessions(): Promise<string[][]> {
   try {
-    return await getSheetValues('Sessions', 'A1:Y1000');
+    return await getSheetValues('Sessions', 'A1:AA1000');
   } catch {
     return [];
   }

@@ -24,6 +24,7 @@ export async function POST(request: NextRequest) {
       referralSitesShown: body.referralSitesShown?.join(', ') || '',
       status: body.status || 'completed',
       under15Excluded: body.under15Excluded ? 'Yes' : 'No',
+      botVersion: body.botVersion || '',
     });
 
     // If there's a referral, also log it
