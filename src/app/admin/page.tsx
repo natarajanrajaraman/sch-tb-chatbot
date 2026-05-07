@@ -172,6 +172,25 @@ function DashboardView({ stats }: { stats: DashboardStats }) {
   );
 }
 
+function downloadCSV(data: string[][], title: string) {
+  const csvContent = data.map(row =>
+    row.map(cell => {
+      const escaped = (cell || '').replace(/"/g, '""');
+      return escaped.includes(',') || escaped.includes('"') || escaped.includes('\n')
+        ? `"${escaped}"`
+        : escaped;
+    }).join(',')
+  ).join('\n');
+  const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const date = new Date().toISOString().split('T')[0];
+  a.href = url;
+  a.download = `tb-chatbot-${title.toLowerCase().replace(/\s+/g, '-')}-${date}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function DataTable({ data, title }: { data: string[][]; title: string }) {
   if (data.length === 0) {
     return (
@@ -186,7 +205,15 @@ function DataTable({ data, title }: { data: string[][]; title: string }) {
 
   return (
     <div>
-      <h2 className="text-lg font-bold text-gray-800 mb-4">{title} ({rows.length} records)</h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-bold text-gray-800">{title} ({rows.length} records)</h2>
+        <button
+          onClick={() => downloadCSV(data, title)}
+          className="px-3 py-1.5 bg-green-600 text-white text-xs rounded-md hover:bg-green-700 transition-colors"
+        >
+          Download CSV
+        </button>
+      </div>
       <div className="bg-white rounded-lg shadow-sm overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
