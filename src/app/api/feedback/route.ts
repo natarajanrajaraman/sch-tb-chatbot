@@ -10,7 +10,8 @@ export async function POST(request: NextRequest) {
       feedbackId,
       body.conversationId,
       body.feedbackText,
-      body.platformView
+      body.platformView,
+      body.snapshot || ''
     );
 
     return NextResponse.json({ success: true, feedbackId });

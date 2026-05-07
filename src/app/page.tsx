@@ -111,7 +111,7 @@ export default function Home() {
           {translationOpen && (
             <>
               <TranslationPanel messages={messages} />
-              <FeedbackPanel conversationId={session.conversationId} platformView={platform} />
+              <FeedbackPanel conversationId={session.conversationId} platformView={platform} messages={messages} conversationState={conversationState} />
             </>
           )}
         </div>

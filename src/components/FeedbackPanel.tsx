@@ -1,13 +1,16 @@
 'use client';
 
 import { useState } from 'react';
+import { Message, ConversationState } from '@/lib/chatEngine';
 
 interface FeedbackPanelProps {
   conversationId: string;
   platformView: string;
+  messages: Message[];
+  conversationState: ConversationState;
 }
 
-export default function FeedbackPanel({ conversationId, platformView }: FeedbackPanelProps) {
+export default function FeedbackPanel({ conversationId, platformView, messages, conversationState }: FeedbackPanelProps) {
   const [feedback, setFeedback] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -15,6 +18,18 @@ export default function FeedbackPanel({ conversationId, platformView }: Feedback
   const handleSubmit = async () => {
     if (!feedback.trim()) return;
     setIsSubmitting(true);
+
+    // Create compact conversation snapshot
+    const snapshot = JSON.stringify({
+      state: conversationState,
+      messageCount: messages.length,
+      messages: messages.map(m => ({
+        sender: m.sender,
+        textEn: m.textEn,
+        ts: m.timestamp,
+      })),
+    });
+
     try {
       await fetch('/api/feedback', {
         method: 'POST',
@@ -23,6 +38,7 @@ export default function FeedbackPanel({ conversationId, platformView }: Feedback
           conversationId,
           feedbackText: feedback,
           platformView,
+          snapshot,
         }),
       });
       setSubmitted(true);

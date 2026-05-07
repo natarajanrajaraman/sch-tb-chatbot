@@ -125,9 +125,9 @@ export async function saveSession(session: SessionRow): Promise<void> {
   await appendToSheet('Sessions', [row]);
 }
 
-export async function saveFeedback(feedbackId: string, conversationId: string, feedbackText: string, platformView: string): Promise<void> {
+export async function saveFeedback(feedbackId: string, conversationId: string, feedbackText: string, platformView: string, snapshot: string = ''): Promise<void> {
   const timestamp = new Date().toISOString();
-  await appendToSheet('Feedback', [[feedbackId, conversationId, timestamp, feedbackText, platformView]]);
+  await appendToSheet('Feedback', [[feedbackId, conversationId, timestamp, feedbackText, platformView, snapshot]]);
 }
 
 export async function saveReferralLog(
@@ -152,7 +152,7 @@ export async function getAllSessions(): Promise<string[][]> {
 
 export async function getAllFeedback(): Promise<string[][]> {
   try {
-    return await getSheetValues('Feedback', 'A1:E1000');
+    return await getSheetValues('Feedback', 'A1:F1000');
   } catch {
     return [];
   }
