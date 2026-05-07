@@ -158,6 +158,45 @@ export async function getAllFeedback(): Promise<string[][]> {
   }
 }
 
+export async function updateSheetCells(sheetName: string, range: string, values: string[][]): Promise<void> {
+  const valuesJson = JSON.stringify(values);
+  await runGSheets('update', [SPREADSHEET_ID, `${sheetName}!${range}`, valuesJson]);
+}
+
+export async function updateReferralLogFollowUp(
+  referralId: string,
+  followUp: {
+    contactAttempts: string;
+    clientContacted: string;
+    referralGivenByTelehealth: string;
+    arrivedAtCenter: string;
+    cxrCompleted: string;
+    cxrResult: string;
+    xpertCompleted: string;
+    xpertResult: string;
+  }
+): Promise<boolean> {
+  // Find the row index by referralId
+  const allData = await getSheetValues('Referral Log', 'A1:T1000');
+  const rowIndex = allData.findIndex(row => row[0] === referralId);
+  if (rowIndex < 0) return false;
+
+  // Row in sheet is 1-indexed, and we need to write to columns L-S (12-19)
+  const sheetRow = rowIndex + 1;
+  const values = [[
+    followUp.contactAttempts,
+    followUp.clientContacted,
+    followUp.referralGivenByTelehealth,
+    followUp.arrivedAtCenter,
+    followUp.cxrCompleted,
+    followUp.cxrResult,
+    followUp.xpertCompleted,
+    followUp.xpertResult,
+  ]];
+  await updateSheetCells('Referral Log', `L${sheetRow}:S${sheetRow}`, values);
+  return true;
+}
+
 export async function getAllReferralLogs(): Promise<string[][]> {
   try {
     return await getSheetValues('Referral Log', 'A1:T1000');
