@@ -262,8 +262,10 @@ export default function ChatWindow({
                     style={{
                       backgroundColor: theme.botBubbleBg,
                       color: theme.botBubbleText,
-                      borderRadius: theme.borderRadius,
                       borderTopLeftRadius: '4px',
+                      borderTopRightRadius: theme.borderRadius,
+                      borderBottomLeftRadius: theme.borderRadius,
+                      borderBottomRightRadius: theme.borderRadius,
                     }}
                   >
                     {msg.textMm}
@@ -276,8 +278,10 @@ export default function ChatWindow({
                   style={{
                     backgroundColor: theme.userBubbleBg,
                     color: theme.userBubbleText,
-                    borderRadius: theme.borderRadius,
+                    borderTopLeftRadius: theme.borderRadius,
                     borderTopRightRadius: '4px',
+                    borderBottomLeftRadius: theme.borderRadius,
+                    borderBottomRightRadius: theme.borderRadius,
                   }}
                 >
                   {msg.textMm}
@@ -341,8 +345,10 @@ export default function ChatWindow({
                 className="px-4 py-3 shadow-sm"
                 style={{
                   backgroundColor: theme.botBubbleBg,
-                  borderRadius: theme.borderRadius,
                   borderTopLeftRadius: '4px',
+                  borderTopRightRadius: theme.borderRadius,
+                  borderBottomLeftRadius: theme.borderRadius,
+                  borderBottomRightRadius: theme.borderRadius,
                 }}
               >
                 <div className="flex gap-1">

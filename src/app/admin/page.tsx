@@ -26,15 +26,18 @@ export default function AdminPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [sessRes, fbRes] = await Promise.all([
+      const [sessRes, fbRes, refRes] = await Promise.all([
         fetch('/api/session'),
         fetch('/api/feedback'),
+        fetch('/api/referral-log'),
       ]);
       const sessData = await sessRes.json();
       const fbData = await fbRes.json();
+      const refData = await refRes.json();
 
       setSessions(sessData.data || []);
       setFeedback(fbData.data || []);
+      setReferralLogs(refData.data || []);
 
       // Calculate stats from session data
       const rows = (sessData.data || []).slice(1); // Skip header
@@ -126,7 +129,7 @@ export default function AdminPage() {
             {activeTab === 'dashboard' && stats && <DashboardView stats={stats} />}
             {activeTab === 'sessions' && <DataTable data={sessions} title="Sessions" />}
             {activeTab === 'feedback' && <DataTable data={feedback} title="Feedback" />}
-            {activeTab === 'referral-log' && <DataTable data={referralLogs.length > 0 ? referralLogs : sessions.length > 0 ? [sessions[0]] : []} title="Referral Log" />}
+            {activeTab === 'referral-log' && <DataTable data={referralLogs} title="Referral Log" />}
           </>
         )}
       </div>

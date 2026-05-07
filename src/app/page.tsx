@@ -46,39 +46,38 @@ export default function Home() {
 
   return (
     <div className="h-screen flex flex-col bg-gray-900 overflow-hidden">
-      {/* Watermark Banner */}
-      <div className="bg-yellow-400 text-yellow-900 text-center py-2 px-4 text-sm font-bold tracking-widest uppercase z-50 relative">
-        ⚠️ PROTOTYPE — FOR INTERNAL TESTING ONLY ⚠️
+      {/* Watermark Banner - minimal */}
+      <div className="bg-yellow-400/80 text-yellow-900/70 text-center py-0.5 px-2 text-[9px] font-medium tracking-wider uppercase z-50">
+        PROTOTYPE — FOR INTERNAL TESTING ONLY
       </div>
 
       {/* Top Bar */}
-      <div className="bg-gray-800 text-white flex items-center justify-between px-4 py-2 z-40">
-        <div className="flex items-center gap-3">
-          <h1 className="text-sm font-semibold hidden sm:block">TB Screening Chatbot</h1>
+      <div className="bg-gray-800 text-white flex items-center justify-between px-3 py-1 z-40">
+        <div className="flex items-center gap-2">
           <PlatformToggle currentPlatform={platform} onPlatformChange={handlePlatformChange} />
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <button
             onClick={handleRestart}
-            className="px-3 py-1.5 bg-red-600 text-white text-xs rounded-md hover:bg-red-700 transition-colors"
+            className="px-2 py-0.5 bg-red-600/80 text-white text-[10px] rounded hover:bg-red-700 transition-colors"
           >
-            🔄 Clear &amp; Restart
+            🔄 Restart
           </button>
           <a
             href="/admin"
-            className="px-3 py-1.5 bg-gray-600 text-white text-xs rounded-md hover:bg-gray-500 transition-colors"
+            className="px-2 py-0.5 bg-gray-600 text-white text-[10px] rounded hover:bg-gray-500 transition-colors"
           >
-            👤 Admin
+            Admin
           </a>
         </div>
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex overflow-hidden relative">
+      <div className="flex-1 flex overflow-hidden">
         {/* Phone Frame Container */}
         <div className="flex-1 flex items-center justify-center p-4">
           <div
-            className="w-full max-w-[420px] h-full max-h-[700px] rounded-2xl overflow-hidden shadow-2xl border-4 border-gray-700 flex flex-col relative"
+            className="w-full max-w-[420px] h-full max-h-[700px] rounded-2xl overflow-hidden shadow-2xl border-4 border-gray-700 flex flex-col"
             style={{ backgroundColor: theme.chatBg }}
           >
             <ChatWindow
@@ -90,16 +89,27 @@ export default function Home() {
               conversationState={conversationState}
               setConversationState={setConversationState}
             />
-            <FeedbackPanel conversationId={session.conversationId} platformView={platform} />
           </div>
         </div>
 
-        {/* Translation Panel */}
-        <TranslationPanel
-          messages={messages}
-          isOpen={translationOpen}
-          onToggle={() => setTranslationOpen(!translationOpen)}
-        />
+        {/* Right Side: Translation + Feedback */}
+        <div className={`flex flex-col transition-all duration-300 ${translationOpen ? 'w-[280px]' : 'w-0'}`}>
+          {/* Toggle Button */}
+          <button
+            onClick={() => setTranslationOpen(!translationOpen)}
+            className="absolute top-12 right-0 z-20 bg-gray-600/60 text-white/70 px-1 py-2 text-[9px] rounded-l hover:bg-gray-600 transition-colors"
+            style={{ writingMode: 'vertical-rl' }}
+          >
+            {translationOpen ? '✕' : 'EN'}
+          </button>
+
+          {translationOpen && (
+            <>
+              <TranslationPanel messages={messages} />
+              <FeedbackPanel conversationId={session.conversationId} platformView={platform} />
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

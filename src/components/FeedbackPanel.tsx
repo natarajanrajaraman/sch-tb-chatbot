@@ -35,23 +35,23 @@ export default function FeedbackPanel({ conversationId, platformView }: Feedback
   };
 
   return (
-    <div className="border-t border-gray-200 bg-gray-50 p-3">
-      <div className="text-xs font-semibold text-gray-500 mb-2">Tester Feedback</div>
-      <div className="flex gap-2">
+    <div className="border-t border-gray-700/30 bg-gray-800/30 px-2 py-2">
+      <div className="text-[9px] font-medium text-gray-500 uppercase tracking-wider mb-1">Tester Feedback</div>
+      <div className="flex gap-1">
         <input
           type="text"
           value={feedback}
           onChange={(e) => setFeedback(e.target.value)}
-          placeholder="Enter feedback about this experience..."
-          className="flex-1 px-3 py-2 text-xs border border-gray-300 rounded-md outline-none focus:ring-1 focus:ring-blue-400"
+          placeholder="Feedback..."
+          className="flex-1 px-2 py-1 text-[10px] bg-gray-700/30 text-gray-300 border border-gray-600/30 rounded outline-none focus:border-gray-500 placeholder-gray-600"
           onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
         />
         <button
           onClick={handleSubmit}
           disabled={!feedback.trim() || isSubmitting}
-          className="px-3 py-2 text-xs bg-gray-800 text-white rounded-md hover:bg-gray-700 disabled:opacity-50 transition-colors"
+          className="px-2 py-1 text-[9px] bg-gray-600/50 text-gray-400 rounded hover:bg-gray-600 disabled:opacity-30 transition-colors"
         >
-          {submitted ? '✓ Sent' : 'Send'}
+          {submitted ? '✓' : '→'}
         </button>
       </div>
     </div>
