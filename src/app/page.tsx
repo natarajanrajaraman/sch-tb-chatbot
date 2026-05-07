@@ -1,65 +1,106 @@
-import Image from "next/image";
+'use client';
+
+import { useState, useEffect, useCallback } from 'react';
+import ChatWindow from '@/components/ChatWindow';
+import TranslationPanel from '@/components/TranslationPanel';
+import PlatformToggle from '@/components/PlatformToggle';
+import FeedbackPanel from '@/components/FeedbackPanel';
+import { PlatformType, PLATFORM_THEMES } from '@/data/platformThemes';
+import {
+  Message,
+  ConversationState,
+  SessionData,
+  getWelcomeMessage,
+  createInitialSession,
+} from '@/lib/chatEngine';
 
 export default function Home() {
+  const [platform, setPlatform] = useState<PlatformType>('messenger');
+  const [translationOpen, setTranslationOpen] = useState(true);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [session, setSession] = useState<SessionData>(createInitialSession('messenger'));
+  const [conversationState, setConversationState] = useState<ConversationState>('WELCOME');
+  const [mounted, setMounted] = useState(false);
+
+  const theme = PLATFORM_THEMES[platform];
+
+  useEffect(() => {
+    setMounted(true);
+    const welcomeMsg = getWelcomeMessage();
+    setMessages([welcomeMsg]);
+  }, []);
+
+  const handlePlatformChange = (newPlatform: PlatformType) => {
+    setPlatform(newPlatform);
+    setSession(prev => ({ ...prev, platformView: newPlatform }));
+  };
+
+  const handleRestart = useCallback(() => {
+    const newSession = createInitialSession(platform);
+    setSession(newSession);
+    setConversationState('WELCOME');
+    setMessages([getWelcomeMessage()]);
+  }, [platform]);
+
+  if (!mounted) return null;
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="h-screen flex flex-col bg-gray-900 overflow-hidden">
+      {/* Watermark Banner */}
+      <div className="bg-yellow-400 text-yellow-900 text-center py-2 px-4 text-sm font-bold tracking-widest uppercase z-50 relative">
+        ⚠️ PROTOTYPE — FOR INTERNAL TESTING ONLY ⚠️
+      </div>
+
+      {/* Top Bar */}
+      <div className="bg-gray-800 text-white flex items-center justify-between px-4 py-2 z-40">
+        <div className="flex items-center gap-3">
+          <h1 className="text-sm font-semibold hidden sm:block">TB Screening Chatbot</h1>
+          <PlatformToggle currentPlatform={platform} onPlatformChange={handlePlatformChange} />
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleRestart}
+            className="px-3 py-1.5 bg-red-600 text-white text-xs rounded-md hover:bg-red-700 transition-colors"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+            🔄 Clear &amp; Restart
+          </button>
+          <a
+            href="/admin"
+            className="px-3 py-1.5 bg-gray-600 text-white text-xs rounded-md hover:bg-gray-500 transition-colors"
+          >
+            👤 Admin
+          </a>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="flex-1 flex overflow-hidden relative">
+        {/* Phone Frame Container */}
+        <div className="flex-1 flex items-center justify-center p-4">
+          <div
+            className="w-full max-w-[420px] h-full max-h-[700px] rounded-2xl overflow-hidden shadow-2xl border-4 border-gray-700 flex flex-col relative"
+            style={{ backgroundColor: theme.chatBg }}
+          >
+            <ChatWindow
+              theme={theme}
+              messages={messages}
+              setMessages={setMessages}
+              session={session}
+              setSession={setSession}
+              conversationState={conversationState}
+              setConversationState={setConversationState}
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            <FeedbackPanel conversationId={session.conversationId} platformView={platform} />
+          </div>
         </div>
-      </main>
+
+        {/* Translation Panel */}
+        <TranslationPanel
+          messages={messages}
+          isOpen={translationOpen}
+          onToggle={() => setTranslationOpen(!translationOpen)}
+        />
+      </div>
     </div>
   );
 }
