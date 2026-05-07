@@ -229,64 +229,89 @@ export default function ChatWindow({
   const lastMessage = messages[messages.length - 1];
   const hasActiveOptions = lastMessage?.sender === 'bot' && lastMessage?.options && lastMessage.options.length > 0;
 
+  const showAvatar = theme.avatarSize !== '0';
+  const formatTime = (ts: number) => {
+    const d = new Date(ts);
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
   return (
-    <div className="flex flex-col h-full" style={{ fontFamily: theme.fontFamily }}>
+    <div className="flex flex-col h-full" style={{ fontFamily: theme.fontFamily, fontSize: theme.fontSize }}>
       {/* Chat Header */}
       <div
-        className="flex items-center gap-3 px-4 py-3 shadow-md z-10"
-        style={{ backgroundColor: theme.headerBg, color: theme.headerText }}
+        className="flex items-center gap-3 shadow-md z-10"
+        style={{ backgroundColor: theme.headerBg, color: theme.headerText, padding: theme.headerPadding }}
       >
-        <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-xl">
+        <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center text-lg">
           {theme.avatarIcon}
         </div>
         <div className="flex-1">
-          <div className="font-semibold text-sm">TB Self-Screening Bot</div>
-          <div className="text-xs opacity-75">တီဘီ ကိုယ်တိုင်စစ်ဆေးခြင်း</div>
+          <div className="font-semibold" style={{ fontSize: theme.fontSize }}>TB Self-Screening Bot</div>
+          <div className="opacity-75" style={{ fontSize: '11px' }}>တီဘီ ကိုယ်တိုင်စစ်ဆေးခြင်း</div>
         </div>
         <span className="text-lg">{theme.headerIcon}</span>
       </div>
 
       {/* Messages Area */}
       <div
-        className="flex-1 overflow-y-auto px-3 py-4 space-y-3"
-        style={{ backgroundColor: theme.chatBg }}
+        className="flex-1 overflow-y-auto px-3 py-3"
+        style={{ backgroundColor: theme.chatBg, gap: theme.messageGap, display: 'flex', flexDirection: 'column' }}
       >
         {messages.map((msg) => (
-          <div key={msg.id} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+          <div key={msg.id} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`} style={{ marginBottom: theme.messageGap }}>
             <div className="max-w-[80%]">
               {msg.sender === 'bot' && (
                 <div className="flex items-end gap-2">
-                  <div className="w-7 h-7 rounded-full bg-gray-300 flex items-center justify-center text-sm flex-shrink-0 mb-1">
-                    🏥
+                  {showAvatar && (
+                    <div
+                      className="rounded-full bg-gray-300 flex items-center justify-center flex-shrink-0 mb-1"
+                      style={{ width: theme.avatarSize, height: theme.avatarSize, fontSize: `calc(${theme.avatarSize} * 0.5)` }}
+                    >
+                      🏥
+                    </div>
+                  )}
+                  <div>
+                    <div
+                      className="whitespace-pre-wrap leading-relaxed shadow-sm"
+                      style={{
+                        backgroundColor: theme.botBubbleBg,
+                        color: theme.botBubbleText,
+                        padding: theme.messagePadding,
+                        fontSize: theme.fontSize,
+                        borderTopLeftRadius: '4px',
+                        borderTopRightRadius: theme.borderRadius,
+                        borderBottomLeftRadius: theme.borderRadius,
+                        borderBottomRightRadius: theme.borderRadius,
+                      }}
+                    >
+                      {msg.textMm}
+                    </div>
+                    {theme.showTimestamp && (
+                      <div className="text-gray-400 mt-0.5" style={{ fontSize: '10px' }}>{formatTime(msg.timestamp)}</div>
+                    )}
                   </div>
+                </div>
+              )}
+              {msg.sender === 'user' && (
+                <div>
                   <div
-                    className="px-4 py-2.5 whitespace-pre-wrap text-sm leading-relaxed shadow-sm"
+                    className="whitespace-pre-wrap leading-relaxed shadow-sm"
                     style={{
-                      backgroundColor: theme.botBubbleBg,
-                      color: theme.botBubbleText,
-                      borderTopLeftRadius: '4px',
-                      borderTopRightRadius: theme.borderRadius,
+                      backgroundColor: theme.userBubbleBg,
+                      color: theme.userBubbleText,
+                      padding: theme.messagePadding,
+                      fontSize: theme.fontSize,
+                      borderTopLeftRadius: theme.borderRadius,
+                      borderTopRightRadius: '4px',
                       borderBottomLeftRadius: theme.borderRadius,
                       borderBottomRightRadius: theme.borderRadius,
                     }}
                   >
                     {msg.textMm}
                   </div>
-                </div>
-              )}
-              {msg.sender === 'user' && (
-                <div
-                  className="px-4 py-2.5 whitespace-pre-wrap text-sm leading-relaxed shadow-sm"
-                  style={{
-                    backgroundColor: theme.userBubbleBg,
-                    color: theme.userBubbleText,
-                    borderTopLeftRadius: theme.borderRadius,
-                    borderTopRightRadius: '4px',
-                    borderBottomLeftRadius: theme.borderRadius,
-                    borderBottomRightRadius: theme.borderRadius,
-                  }}
-                >
-                  {msg.textMm}
+                  {theme.showTimestamp && (
+                    <div className="text-gray-400 mt-0.5 text-right" style={{ fontSize: '10px' }}>{formatTime(msg.timestamp)}</div>
+                  )}
                 </div>
               )}
             </div>
@@ -300,7 +325,7 @@ export default function ChatWindow({
               <button
                 key={opt.id}
                 onClick={() => handleOptionClick(opt.id, opt.labelMm, opt.labelEn)}
-                className={`px-4 py-2 text-sm font-medium transition-all hover:opacity-80 active:scale-95 ${
+                className={`font-medium transition-all hover:opacity-80 active:scale-95 ${
                   conversationState === 'ASK_CONDITIONS' && selectedConditions.includes(opt.id)
                     ? 'ring-2 ring-offset-1'
                     : ''
@@ -313,7 +338,9 @@ export default function ChatWindow({
                     ? theme.buttonBg
                     : theme.buttonText,
                   border: `1.5px solid ${theme.buttonBorder}`,
-                  borderRadius: '20px',
+                  borderRadius: theme.buttonRadius,
+                  padding: theme.messagePadding,
+                  fontSize: theme.fontSize,
                 }}
               >
                 {opt.labelMm}
@@ -322,12 +349,14 @@ export default function ChatWindow({
             {conversationState === 'ASK_CONDITIONS' && selectedConditions.length > 0 && (
               <button
                 onClick={handleConfirmConditions}
-                className="px-4 py-2 text-sm font-bold transition-all hover:opacity-80 active:scale-95"
+                className="font-bold transition-all hover:opacity-80 active:scale-95"
                 style={{
                   backgroundColor: theme.buttonBorder,
                   color: '#ffffff',
-                  borderRadius: '20px',
+                  borderRadius: theme.buttonRadius,
                   border: 'none',
+                  padding: theme.messagePadding,
+                  fontSize: theme.fontSize,
                 }}
               >
                 {BOT_MESSAGES.confirm.mm}
@@ -340,9 +369,14 @@ export default function ChatWindow({
         {isTyping && (
           <div className="flex justify-start">
             <div className="flex items-end gap-2">
-              <div className="w-7 h-7 rounded-full bg-gray-300 flex items-center justify-center text-sm flex-shrink-0 mb-1">
-                🏥
-              </div>
+              {showAvatar && (
+                <div
+                  className="rounded-full bg-gray-300 flex items-center justify-center flex-shrink-0 mb-1"
+                  style={{ width: theme.avatarSize, height: theme.avatarSize, fontSize: `calc(${theme.avatarSize} * 0.5)` }}
+                >
+                  🏥
+                </div>
+              )}
               <div
                 className="px-4 py-3 shadow-sm"
                 style={{
@@ -379,8 +413,8 @@ export default function ChatWindow({
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             placeholder={conversationState === 'ASK_AGE' ? 'အသက် ရိုက်ထည့်ပါ...' : 'စာရိုက်ပါ...'}
-            className="flex-1 px-4 py-2.5 rounded-full text-sm outline-none border"
-            style={{ backgroundColor: '#ffffff' }}
+            className="flex-1 px-4 py-2.5 outline-none border"
+            style={{ backgroundColor: '#ffffff', borderRadius: theme.inputRadius, fontSize: theme.fontSize }}
             disabled={conversationState === 'GOODBYE'}
             autoFocus
           />

@@ -77,8 +77,13 @@ export default function Home() {
         {/* Phone Frame Container */}
         <div className="flex-1 flex items-center justify-center p-4">
           <div
-            className="w-full max-w-[420px] h-full max-h-[700px] rounded-2xl overflow-hidden shadow-2xl border-4 border-gray-700 flex flex-col"
-            style={{ backgroundColor: theme.chatBg }}
+            className="w-full rounded-2xl overflow-hidden shadow-2xl border-4 border-gray-700 flex flex-col transition-all duration-300"
+            style={{
+              backgroundColor: theme.chatBg,
+              maxWidth: theme.frameWidth,
+              maxHeight: theme.frameHeight,
+              height: '100%',
+            }}
           >
             <ChatWindow
               theme={theme}

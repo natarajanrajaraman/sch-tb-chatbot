@@ -1,13 +1,11 @@
 'use client';
 
-import { PlatformType, PLATFORM_THEMES } from '@/data/platformThemes';
+import { PlatformType, PLATFORM_THEMES, PLATFORM_ORDER } from '@/data/platformThemes';
 
 interface PlatformToggleProps {
   currentPlatform: PlatformType;
   onPlatformChange: (platform: PlatformType) => void;
 }
-
-const PLATFORM_ORDER: PlatformType[] = ['web', 'messenger', 'telegram', 'viber'];
 
 export default function PlatformToggle({ currentPlatform, onPlatformChange }: PlatformToggleProps) {
   return (
