@@ -122,10 +122,12 @@ export default function ChatWindow({
           ).join('\n\n');
 
           const letter = generateReferralLetter(result.updatedSession, sites[0].facility_name, result.updatedSession.referralTownship || '');
+          const scrId = result.updatedSession.screeningId || '';
+          const idMsg = BOT_MESSAGES.screening_id_instruction;
 
           resultText = {
-            mm: BOT_MESSAGES.self_referral_result_header.mm + siteListMm + '\n' + BOT_MESSAGES.referral_letter_header.mm + '\n\n' + letter.mm,
-            en: BOT_MESSAGES.self_referral_result_header.en + siteListEn + '\n' + BOT_MESSAGES.referral_letter_header.en + '\n\n' + letter.en,
+            mm: BOT_MESSAGES.self_referral_result_header.mm + siteListMm + '\n' + BOT_MESSAGES.referral_letter_header.mm + '\n\n' + letter.mm + idMsg.mm.replace('{SCREENING_ID}', scrId),
+            en: BOT_MESSAGES.self_referral_result_header.en + siteListEn + '\n' + BOT_MESSAGES.referral_letter_header.en + '\n\n' + letter.en + idMsg.en.replace('{SCREENING_ID}', scrId),
           };
 
           result.updatedSession.referralSitesShown = sites.map((s: { site_id: string }) => s.site_id);

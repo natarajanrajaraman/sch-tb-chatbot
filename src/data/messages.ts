@@ -97,4 +97,8 @@ export const BOT_MESSAGES = {
     mm: 'အတည်ပြုမည်',
     en: 'Confirm',
   },
+  screening_id_instruction: {
+    mm: '\n\n🆔 သင့် စစ်ဆေးမှု ID: {SCREENING_ID}\nကျေးဇူးပြု၍ ဤ ID ကို Tele-Health အဖွဲ့ (သို့) တီဘီစစ်ဆေးရေးစင်တာသို့ ပေးပါ။',
+    en: '\n\n🆔 Your Screening ID: {SCREENING_ID}\nPlease share this ID with the Tele-Health team or the TB screening center.',
+  },
 };

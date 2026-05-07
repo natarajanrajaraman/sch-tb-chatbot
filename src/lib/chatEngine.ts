@@ -60,11 +60,23 @@ export interface SessionData {
   referralSitesShown?: string[];
   status: 'in_progress' | 'completed' | 'abandoned';
   under15Excluded: boolean;
+  screeningId?: string;
   botVersion: string;
 }
 
 export function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+}
+
+export function generateScreeningId(): string {
+  const now = new Date();
+  const yy = String(now.getFullYear()).slice(2);
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no I/O/0/1 to avoid confusion
+  let code = '';
+  for (let i = 0; i < 4; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return `SCR-${yy}${mm}${dd}-${code}`;
 }
 
 export function createInitialSession(platformView: string): SessionData {
@@ -247,6 +259,7 @@ export function processUserInput(
     }
 
     case 'REFERRAL_CHOICE': {
+      updatedSession.screeningId = generateScreeningId();
       if (input === 'assisted') {
         updatedSession.referralType = 'Assisted';
         return {
@@ -266,9 +279,14 @@ export function processUserInput(
     case 'ASSISTED_ASK_PHONE': {
       updatedSession.clientPhone = input;
       updatedSession.status = 'completed';
+      const scrId = updatedSession.screeningId || '';
+      const idMsg = BOT_MESSAGES.screening_id_instruction;
       return {
         nextState: 'ASSISTED_RESULT',
-        botMessage: createBotMessage(BOT_MESSAGES.assisted_referral_result, getEndOptions()),
+        botMessage: createBotMessage({
+          mm: BOT_MESSAGES.assisted_referral_result.mm + idMsg.mm.replace('{SCREENING_ID}', scrId),
+          en: BOT_MESSAGES.assisted_referral_result.en + idMsg.en.replace('{SCREENING_ID}', scrId),
+        }, getEndOptions()),
         updatedSession,
       };
     }

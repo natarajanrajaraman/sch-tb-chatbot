@@ -88,6 +88,7 @@ export interface SessionRow {
   referralSitesShown: string;
   status: string;
   under15Excluded: string;
+  screeningId: string;
   botVersion: string;
 }
 
@@ -117,6 +118,7 @@ export async function saveSession(session: SessionRow): Promise<void> {
     session.referralSitesShown || '',
     session.status,
     session.under15Excluded,
+    session.screeningId || '',
     session.botVersion || '',
   ];
 
@@ -131,11 +133,12 @@ export async function saveFeedback(feedbackId: string, conversationId: string, f
 export async function saveReferralLog(
   referralId: string, conversationId: string, clientName: string,
   clientAge: string, clientGender: string, referralType: string,
-  township: string, facilityNames: string, status: string
+  township: string, facilityNames: string, status: string,
+  screeningId: string
 ): Promise<void> {
   const timestamp = new Date().toISOString();
   await appendToSheet('Referral Log', [
-    [referralId, conversationId, timestamp, clientName, clientAge, clientGender, referralType, township, facilityNames, 'Yes', status],
+    [referralId, conversationId, timestamp, clientName, clientAge, clientGender, referralType, township, facilityNames, 'Yes', status, screeningId],
   ]);
 }
 
@@ -157,7 +160,7 @@ export async function getAllFeedback(): Promise<string[][]> {
 
 export async function getAllReferralLogs(): Promise<string[][]> {
   try {
-    return await getSheetValues('Referral Log', 'A1:K1000');
+    return await getSheetValues('Referral Log', 'A1:T1000');
   } catch {
     return [];
   }

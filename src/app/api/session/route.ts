@@ -24,6 +24,7 @@ export async function POST(request: NextRequest) {
       referralSitesShown: body.referralSitesShown?.join(', ') || '',
       status: body.status || 'completed',
       under15Excluded: body.under15Excluded ? 'Yes' : 'No',
+      screeningId: body.screeningId || '',
       botVersion: body.botVersion || '',
     });
 
@@ -38,7 +39,8 @@ export async function POST(request: NextRequest) {
         body.referralType,
         body.referralTownship || '',
         body.referralSitesShown?.join(', ') || '',
-        'Referred'
+        'Referred',
+        body.screeningId || ''
       );
     }
 
