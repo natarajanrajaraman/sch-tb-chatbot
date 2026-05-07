@@ -34,6 +34,19 @@ export default function TranslationPanel({ messages }: TranslationPanelProps) {
                 {msg.sender === 'user' ? 'U: ' : 'B: '}
               </span>
               {msg.textEn}
+              {msg.sender === 'bot' && msg.options && msg.options.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {msg.options.map((opt) => (
+                    <span
+                      key={opt.id}
+                      className="inline-block px-1.5 py-0.5 rounded bg-gray-600/30 text-gray-400/70"
+                      style={{ fontSize: '8px' }}
+                    >
+                      {opt.labelEn}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         ))}
