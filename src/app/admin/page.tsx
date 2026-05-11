@@ -244,9 +244,6 @@ function ReferralLogTable({ data, onRefresh }: { data: string[][]; onRefresh: ()
     setExpandedRow(null);
   };
 
-  // Show first 12 columns (core data) in the table, hide follow-up cols
-  const displayHeaders = headers.slice(0, 12);
-
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
@@ -258,12 +255,12 @@ function ReferralLogTable({ data, onRefresh }: { data: string[][]; onRefresh: ()
           Download CSV
         </button>
       </div>
-      <div className="text-xs text-gray-500 mb-2">Click a row to expand follow-up tracking fields</div>
+      <div className="text-xs text-gray-500 mb-2">Click a row to expand and edit follow-up tracking fields</div>
       <div className="bg-white rounded-lg shadow-sm overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
             <tr className="bg-gray-50 border-b">
-              {displayHeaders.map((h, i) => (
+              {headers.map((h, i) => (
                 <th key={i} className="px-3 py-2.5 text-left font-semibold text-gray-600 whitespace-nowrap">{h}</th>
               ))}
             </tr>
@@ -276,13 +273,13 @@ function ReferralLogTable({ data, onRefresh }: { data: string[][]; onRefresh: ()
                   onClick={() => handleExpand(i)}
                   className={`border-b cursor-pointer transition-colors ${expandedRow === i ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
                 >
-                  {row.slice(0, 12).map((cell, j) => (
-                    <td key={j} className="px-3 py-2 text-gray-700 whitespace-nowrap max-w-[200px] truncate" title={cell}>{cell}</td>
+                  {headers.map((_, j) => (
+                    <td key={j} className="px-3 py-2 text-gray-700 whitespace-nowrap max-w-[200px] truncate" title={row[j] || ''}>{row[j] || ''}</td>
                   ))}
                 </tr>
                 {expandedRow === i && (
                   <tr key={`expand-${i}`}>
-                    <td colSpan={displayHeaders.length} className="bg-blue-50/50 px-6 py-4">
+                    <td colSpan={headers.length} className="bg-blue-50/50 px-6 py-4">
                       <div className="text-sm font-semibold text-gray-700 mb-3">Follow-up Tracking — {row[0]}</div>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                         {FOLLOW_UP_FIELDS.map(field => (
