@@ -79,11 +79,6 @@ export default function AdminPage() {
 
   return (
     <div className="min-h-screen bg-gray-100">
-      {/* Watermark */}
-      <div className="bg-yellow-400 text-yellow-900 text-center py-1.5 px-4 text-xs font-bold tracking-widest uppercase">
-        ⚠️ PROTOTYPE — ADMIN VIEW — FOR INTERNAL TESTING ONLY ⚠️
-      </div>
-
       {/* Header */}
       <div className="bg-gray-800 text-white px-6 py-4 flex items-center justify-between">
         <div>

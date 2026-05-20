@@ -3,9 +3,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import ChatWindow from '@/components/ChatWindow';
 import TranslationPanel from '@/components/TranslationPanel';
-import PlatformToggle from '@/components/PlatformToggle';
 import FeedbackPanel from '@/components/FeedbackPanel';
-import { PlatformType, PLATFORM_THEMES } from '@/data/platformThemes';
+import { PlatformType, PLATFORM_THEMES, PLATFORM_ORDER } from '@/data/platformThemes';
 import {
   Message,
   ConversationState,
@@ -16,7 +15,8 @@ import {
 
 export default function Home() {
   const [platform, setPlatform] = useState<PlatformType>('messenger');
-  const [translationOpen, setTranslationOpen] = useState(true);
+  const [debugPanelOpen, setDebugPanelOpen] = useState(false);
+  const [translationOpen, setTranslationOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [session, setSession] = useState<SessionData>(createInitialSession('messenger'));
   const [conversationState, setConversationState] = useState<ConversationState>('WELCOME');
@@ -45,76 +45,126 @@ export default function Home() {
   if (!mounted) return null;
 
   return (
-    <div className="h-screen flex flex-col bg-gray-900 overflow-hidden">
-      {/* Watermark Banner - minimal */}
-      <div className="bg-yellow-400/80 text-yellow-900/70 text-center py-0.5 px-2 text-[9px] font-medium tracking-wider uppercase z-50">
-        PROTOTYPE — FOR INTERNAL TESTING ONLY
-      </div>
-
-      {/* Top Bar */}
-      <div className="bg-gray-800 text-white flex items-center justify-between px-3 py-1 z-40">
-        <div className="flex items-center gap-2">
-          <PlatformToggle currentPlatform={platform} onPlatformChange={handlePlatformChange} />
-        </div>
-        <div className="flex items-center gap-1.5">
-          <button
-            onClick={handleRestart}
-            className="px-2 py-0.5 bg-red-600/80 text-white text-[10px] rounded hover:bg-red-700 transition-colors"
-          >
-            🔄 Restart
-          </button>
-          <a
-            href="/admin"
-            className="px-2 py-0.5 bg-gray-600 text-white text-[10px] rounded hover:bg-gray-500 transition-colors"
-          >
-            Admin
-          </a>
+    <div className="h-screen flex bg-gray-900 overflow-hidden relative">
+      {/* LEFT: Clean device mockup */}
+      <div className="flex-1 flex items-center justify-center p-6">
+        <div
+          className="w-full rounded-2xl overflow-hidden shadow-2xl border-4 border-gray-700 flex flex-col transition-all duration-300"
+          style={{
+            backgroundColor: theme.chatBg,
+            maxWidth: theme.frameWidth,
+            maxHeight: theme.frameHeight,
+            height: '100%',
+          }}
+        >
+          <ChatWindow
+            theme={theme}
+            messages={messages}
+            setMessages={setMessages}
+            session={session}
+            setSession={setSession}
+            conversationState={conversationState}
+            setConversationState={setConversationState}
+          />
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Phone Frame Container */}
-        <div className="flex-1 flex items-center justify-center p-4">
-          <div
-            className="w-full rounded-2xl overflow-hidden shadow-2xl border-4 border-gray-700 flex flex-col transition-all duration-300"
-            style={{
-              backgroundColor: theme.chatBg,
-              maxWidth: theme.frameWidth,
-              maxHeight: theme.frameHeight,
-              height: '100%',
-            }}
-          >
-            <ChatWindow
-              theme={theme}
-              messages={messages}
-              setMessages={setMessages}
-              session={session}
-              setSession={setSession}
-              conversationState={conversationState}
-              setConversationState={setConversationState}
-            />
-          </div>
-        </div>
+      {/* Toggle tab for debug panel */}
+      <button
+        onClick={() => setDebugPanelOpen(!debugPanelOpen)}
+        className="absolute top-1/2 -translate-y-1/2 right-0 z-30 bg-yellow-400/80 text-yellow-900/70 px-1 py-3 text-[9px] font-bold rounded-l hover:bg-yellow-400 transition-colors"
+        style={{ writingMode: 'vertical-rl', right: debugPanelOpen ? '320px' : '0' }}
+      >
+        {debugPanelOpen ? 'CLOSE' : 'DEBUG'}
+      </button>
 
-        {/* Right Side: Translation + Feedback */}
-        <div className={`flex flex-col transition-all duration-300 ${translationOpen ? 'w-[280px]' : 'w-0'}`}>
-          {/* Toggle Button */}
-          <button
-            onClick={() => setTranslationOpen(!translationOpen)}
-            className="absolute top-12 right-0 z-20 bg-gray-600/60 text-white/70 px-1 py-2 text-[9px] rounded-l hover:bg-gray-600 transition-colors"
-            style={{ writingMode: 'vertical-rl' }}
-          >
-            {translationOpen ? '✕' : 'EN'}
-          </button>
+      {/* RIGHT: Debug panel */}
+      <div
+        className={`flex flex-col border-l border-gray-700/50 bg-gray-800/80 overflow-hidden transition-all duration-300 ${
+          debugPanelOpen ? 'w-[320px]' : 'w-0 border-l-0'
+        }`}
+      >
+        {debugPanelOpen && (
+          <>
+            {/* Panel header */}
+            <div className="bg-yellow-400/80 text-yellow-900/70 text-center py-1 px-2 text-[9px] font-bold tracking-wider uppercase shrink-0">
+              PROTOTYPE — FOR INTERNAL TESTING ONLY
+            </div>
 
-          {translationOpen && (
-            <>
-              <TranslationPanel messages={messages} />
-              <FeedbackPanel conversationId={session.conversationId} platformView={platform} messages={messages} conversationState={conversationState} />
-            </>
-          )}
-        </div>
+            {/* Controls section */}
+            <div className="px-3 py-2.5 border-b border-gray-700/30 bg-gray-800/60 space-y-2.5 shrink-0">
+              {/* Platform skin */}
+              <div>
+                <div className="text-[9px] font-medium text-gray-500 uppercase tracking-wider mb-1.5">Platform Skin</div>
+                <div className="flex gap-1">
+                  {PLATFORM_ORDER.map((p) => {
+                    const t = PLATFORM_THEMES[p];
+                    const isActive = p === platform;
+                    return (
+                      <button
+                        key={p}
+                        onClick={() => handlePlatformChange(p)}
+                        className={`flex-1 py-1 rounded text-[10px] font-medium transition-all ${
+                          isActive
+                            ? 'bg-white text-gray-900 shadow-sm'
+                            : 'bg-gray-700/40 text-gray-400 hover:text-gray-200 hover:bg-gray-700/60'
+                        }`}
+                      >
+                        {t.headerIcon} {t.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Actions row */}
+              <div className="flex gap-2">
+                <button
+                  onClick={handleRestart}
+                  className="flex-1 py-1 bg-red-600/70 text-white text-[10px] font-medium rounded hover:bg-red-700 transition-colors"
+                >
+                  Restart Conversation
+                </button>
+                <a
+                  href="/admin"
+                  className="px-3 py-1 bg-gray-600/60 text-gray-300 text-[10px] font-medium rounded hover:bg-gray-600 transition-colors text-center"
+                >
+                  Admin
+                </a>
+              </div>
+            </div>
+
+            {/* English translation toggle + panel */}
+            <div className="flex flex-col min-h-0 flex-1 overflow-hidden">
+              <button
+                onClick={() => setTranslationOpen(!translationOpen)}
+                className={`px-3 py-1.5 text-[10px] font-medium tracking-wider uppercase text-left border-b border-gray-700/30 transition-colors shrink-0 ${
+                  translationOpen
+                    ? 'bg-blue-900/30 text-blue-300'
+                    : 'bg-gray-800/40 text-gray-500 hover:text-gray-300 hover:bg-gray-800/60'
+                }`}
+              >
+                {translationOpen ? '▾' : '▸'} English Translation
+              </button>
+
+              {translationOpen && (
+                <div className="flex-1 min-h-0 overflow-hidden">
+                  <TranslationPanel messages={messages} />
+                </div>
+              )}
+            </div>
+
+            {/* Feedback always visible at bottom */}
+            <div className="shrink-0">
+              <FeedbackPanel
+                conversationId={session.conversationId}
+                platformView={platform}
+                messages={messages}
+                conversationState={conversationState}
+              />
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

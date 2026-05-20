@@ -1,42 +1,48 @@
-// Google Sheets integration using the OpenClaw auth module
-// For local development, calls the gsheets.js CLI tool
-// For production, uses direct API calls
+import { google } from 'googleapis';
 
-import { execFile } from 'child_process';
-import { promisify } from 'util';
-import path from 'path';
+const SPREADSHEET_ID = process.env.GOOGLE_SHEET_ID || '1WNOvqyienkQNjF5ECUIPq5w30qaAVDQe0cuJrBv2P6w';
 
-const execFileAsync = promisify(execFile);
+function getAuth() {
+  const keyJson = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
+  if (!keyJson) throw new Error('GOOGLE_SERVICE_ACCOUNT_KEY env var is not set');
+  const credentials = JSON.parse(keyJson);
+  return new google.auth.GoogleAuth({
+    credentials,
+    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+  });
+}
 
-const SPREADSHEET_ID = process.env.GOOGLE_SHEET_ID || '1Ri-Qok_oaRNhJqSTZXaL-gnr2imbJityXVWvRGMUhLU';
-const GSHEETS_SCRIPT = path.join(
-  process.env.USERPROFILE || process.env.HOME || '',
-  '.openclaw',
-  'skills',
-  'google-sheets',
-  'scripts',
-  'gsheets.js'
-);
-
-async function runGSheets(command: string, args: string[]): Promise<string> {
-  try {
-    const { stdout } = await execFileAsync('node', [GSHEETS_SCRIPT, command, ...args], { timeout: 15000 });
-    return stdout;
-  } catch (error) {
-    console.error('Google Sheets API error:', error);
-    throw error;
-  }
+function getSheets() {
+  return google.sheets({ version: 'v4', auth: getAuth() });
 }
 
 export async function appendToSheet(sheetName: string, values: string[][]): Promise<void> {
-  const valuesJson = JSON.stringify(values);
-  await runGSheets('append', [SPREADSHEET_ID, `${sheetName}!A:Z`, valuesJson]);
+  const sheets = getSheets();
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: SPREADSHEET_ID,
+    range: `${sheetName}!A:Z`,
+    valueInputOption: 'RAW',
+    requestBody: { values },
+  });
 }
 
 export async function getSheetValues(sheetName: string, range: string): Promise<string[][]> {
-  const result = await runGSheets('get', [SPREADSHEET_ID, '--values', `${sheetName}!${range}`]);
-  const parsed = JSON.parse(result);
-  return parsed.values || [];
+  const sheets = getSheets();
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: SPREADSHEET_ID,
+    range: `${sheetName}!${range}`,
+  });
+  return (res.data.values as string[][]) || [];
+}
+
+export async function updateSheetCells(sheetName: string, range: string, values: string[][]): Promise<void> {
+  const sheets = getSheets();
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: SPREADSHEET_ID,
+    range: `${sheetName}!${range}`,
+    valueInputOption: 'RAW',
+    requestBody: { values },
+  });
 }
 
 export async function getReferralSites(township: string): Promise<Record<string, string>[]> {
@@ -52,7 +58,6 @@ export async function getReferralSites(township: string): Promise<Record<string,
       return site;
     });
 
-    // Match by township (case-insensitive, partial match)
     const searchLower = township.toLowerCase().trim();
     const matched = allSites.filter(s =>
       s.township.toLowerCase().includes(searchLower) ||
@@ -156,11 +161,6 @@ export async function getAllFeedback(): Promise<string[][]> {
   }
 }
 
-export async function updateSheetCells(sheetName: string, range: string, values: string[][]): Promise<void> {
-  const valuesJson = JSON.stringify(values);
-  await runGSheets('update', [SPREADSHEET_ID, `${sheetName}!${range}`, valuesJson]);
-}
-
 export async function updateReferralLogFollowUp(
   referralId: string,
   followUp: {
@@ -174,12 +174,10 @@ export async function updateReferralLogFollowUp(
     xpertResult: string;
   }
 ): Promise<boolean> {
-  // Find the row index by referralId
   const allData = await getSheetValues('Referral Log', 'A1:T1000');
   const rowIndex = allData.findIndex(row => row[0] === referralId);
   if (rowIndex < 0) return false;
 
-  // Row in sheet is 1-indexed, and we need to write to columns L-S (12-19)
   const sheetRow = rowIndex + 1;
   const values = [[
     followUp.contactAttempts,
