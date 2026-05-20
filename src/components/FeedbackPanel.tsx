@@ -14,6 +14,7 @@ export default function FeedbackPanel({ conversationId, platformView, messages, 
   const [feedback, setFeedback] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState(false);
 
   const handleSubmit = async () => {
     if (!feedback.trim()) return;
@@ -31,7 +32,8 @@ export default function FeedbackPanel({ conversationId, platformView, messages, 
     });
 
     try {
-      await fetch('/api/feedback', {
+      setError(false);
+      const res = await fetch('/api/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -41,11 +43,14 @@ export default function FeedbackPanel({ conversationId, platformView, messages, 
           snapshot,
         }),
       });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setSubmitted(true);
       setFeedback('');
       setTimeout(() => setSubmitted(false), 3000);
-    } catch {
-      // Silently fail for prototype
+    } catch (err) {
+      console.error('Feedback submit failed:', err);
+      setError(true);
+      setTimeout(() => setError(false), 4000);
     }
     setIsSubmitting(false);
   };
@@ -67,7 +72,7 @@ export default function FeedbackPanel({ conversationId, platformView, messages, 
           disabled={!feedback.trim() || isSubmitting}
           className="px-2 py-1 text-[9px] bg-gray-600/50 text-gray-400 rounded hover:bg-gray-600 disabled:opacity-30 transition-colors"
         >
-          {submitted ? '✓' : '→'}
+          {error ? '✗' : submitted ? '✓' : '→'}
         </button>
       </div>
     </div>
