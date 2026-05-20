@@ -2,11 +2,11 @@
 // For local development, calls the gsheets.js CLI tool
 // For production, uses direct API calls
 
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 const SPREADSHEET_ID = process.env.GOOGLE_SHEET_ID || '1Ri-Qok_oaRNhJqSTZXaL-gnr2imbJityXVWvRGMUhLU';
 const GSHEETS_SCRIPT = path.join(
@@ -19,10 +19,8 @@ const GSHEETS_SCRIPT = path.join(
 );
 
 async function runGSheets(command: string, args: string[]): Promise<string> {
-  const escapedArgs = args.map(a => `"${a.replace(/"/g, '\\"')}"`).join(' ');
-  const cmd = `node "${GSHEETS_SCRIPT}" ${command} ${escapedArgs}`;
   try {
-    const { stdout } = await execAsync(cmd, { timeout: 15000 });
+    const { stdout } = await execFileAsync('node', [GSHEETS_SCRIPT, command, ...args], { timeout: 15000 });
     return stdout;
   } catch (error) {
     console.error('Google Sheets API error:', error);
