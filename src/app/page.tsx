@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import ChatWindow from '@/components/ChatWindow';
 import TranslationPanel from '@/components/TranslationPanel';
 import FeedbackPanel from '@/components/FeedbackPanel';
+import WorkflowFlowchart from '@/components/WorkflowFlowchart';
 import { PlatformType, PLATFORM_THEMES, PLATFORM_ORDER } from '@/data/platformThemes';
 import {
   Message,
@@ -126,46 +127,40 @@ export default function Home() {
               PROTOTYPE v{BOT_VERSION} — FOR INTERNAL TESTING ONLY
             </div>
 
-            {/* Controls section */}
-            <div className="px-3 py-2.5 border-b border-gray-700/30 bg-gray-800/60 space-y-2.5 shrink-0">
-              {/* Platform skin */}
-              <div>
-                <div className="text-[9px] font-medium text-gray-500 uppercase tracking-wider mb-1.5">Platform Skin</div>
-                <div className="flex gap-1">
-                  {PLATFORM_ORDER.map((p) => {
-                    const t = PLATFORM_THEMES[p];
-                    const isActive = p === platform;
-                    return (
-                      <button
-                        key={p}
-                        onClick={() => handlePlatformChange(p)}
-                        className={`flex-1 py-1 rounded text-[10px] font-medium transition-all ${
-                          isActive
-                            ? 'bg-white text-gray-900 shadow-sm'
-                            : 'bg-gray-700/40 text-gray-400 hover:text-gray-200 hover:bg-gray-700/60'
-                        }`}
-                      >
-                        {t.headerIcon} {t.name}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+            {/* Workflow flowchart — current conversation position */}
+            <WorkflowFlowchart state={conversationState} />
 
-              {/* Actions row */}
-              <div className="flex gap-2">
-                <button
-                  onClick={handleRestart}
-                  className="flex-1 py-1 bg-red-600/70 text-white text-[10px] font-medium rounded hover:bg-red-700 transition-colors"
-                >
-                  Restart Conversation
-                </button>
-                <a
-                  href="/admin"
-                  className="px-3 py-1 bg-gray-600/60 text-gray-300 text-[10px] font-medium rounded hover:bg-gray-600 transition-colors text-center"
-                >
-                  Admin
-                </a>
+            {/* Restart Conversation — own row at top */}
+            <div className="px-3 pt-2.5 pb-1 shrink-0">
+              <button
+                onClick={handleRestart}
+                className="w-full py-1 bg-red-600/70 text-white text-[10px] font-medium rounded hover:bg-red-700 transition-colors"
+              >
+                Restart Conversation
+              </button>
+            </div>
+
+            {/* Platform skin */}
+            <div className="px-3 py-2 border-b border-gray-700/30 bg-gray-800/60 shrink-0">
+              <div className="text-[9px] font-medium text-gray-500 uppercase tracking-wider mb-1.5">Platform Skin</div>
+              <div className="flex gap-1">
+                {PLATFORM_ORDER.map((p) => {
+                  const t = PLATFORM_THEMES[p];
+                  const isActive = p === platform;
+                  return (
+                    <button
+                      key={p}
+                      onClick={() => handlePlatformChange(p)}
+                      className={`flex-1 py-1 rounded text-[10px] font-medium transition-all ${
+                        isActive
+                          ? 'bg-white text-gray-900 shadow-sm'
+                          : 'bg-gray-700/40 text-gray-400 hover:text-gray-200 hover:bg-gray-700/60'
+                      }`}
+                    >
+                      {t.headerIcon} {t.name}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -187,6 +182,23 @@ export default function Home() {
                   <TranslationPanel messages={messages} />
                 </div>
               )}
+            </div>
+
+            {/* Dashboard views — own rows just below English Translation */}
+            <div className="px-3 py-2 border-t border-gray-700/30 bg-gray-800/40 space-y-1 shrink-0">
+              <div className="text-[9px] font-medium text-gray-500 uppercase tracking-wider mb-1">Dashboards (mock auth)</div>
+              <a href="/admin" className="block w-full px-2 py-1 bg-gray-700/50 text-gray-200 text-[10px] font-medium rounded hover:bg-gray-700 text-center">
+                SCH Admin View
+              </a>
+              <a href="/telehealth" className="block w-full px-2 py-1 bg-gray-700/50 text-gray-200 text-[10px] font-medium rounded hover:bg-gray-700 text-center">
+                SCH Telehealth View
+              </a>
+              <a href="/screening-provider" className="block w-full px-2 py-1 bg-gray-700/50 text-gray-200 text-[10px] font-medium rounded hover:bg-gray-700 text-center">
+                TB Screening Provider View
+              </a>
+              <a href="/care-provider" className="block w-full px-2 py-1 bg-gray-700/50 text-gray-200 text-[10px] font-medium rounded hover:bg-gray-700 text-center">
+                TB Care Provider View
+              </a>
             </div>
 
             {/* Feedback always visible at bottom */}

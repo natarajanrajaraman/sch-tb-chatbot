@@ -1,4 +1,4 @@
-# TB Self-Check Chatbot — Production Handoff Notes
+# SCH TB Chatbot — Production Handoff Notes
 
 > **This document is the bridge from prototype to production.**
 >
@@ -18,6 +18,7 @@
 
 | Version | Date       | Highlights                                                                                                                |
 |---------|------------|---------------------------------------------------------------------------------------------------------------------------|
+| 0.6.0   | 2026-06-25 | Chat header rebrand to "SCH TB Chatbot". Universal mock auth gate (username `123` / password `abc`) on every dashboard. 4 role-based dashboard routes: SCH Admin / SCH Telehealth / TB Screening Provider / TB Care Provider. New `Care Referral Log` sheet tab + API. "Screening Referral Log" label (tab name kept as `Referral Log` underneath). Workflow flowchart in debug panel showing current conversation position. Debug panel layout reshuffle. Translation panel scroll fix. By-destination referral summary on SCH Admin dashboard. Comparison vs old SCH FB bot in `docs/FB-BOT-COMPARISON.md`. |
 | 0.5.0   | 2026-06-25 | Universal Back / Exit / "What does this mean?" buttons across all mid-flow states. Version shown on the prototype banner. |
 | 0.4.0   | 2026-06-25 | 8 symptoms + 10 risk factors (Q6). 3-bucket result. Phone-contact consent. Cascading State/District/Township. Q17 referral letter with screening ID. |
 | 0.3.0   | 2026-06-24 | Landing branching (P1 self-check vs P3 patient info stub). Per-question What/Back/Exit on screening Qs. Language Map sheet + client loader. Default skin = Viber. |
@@ -230,19 +231,63 @@ address · phone · services · operating_hours · type · notes`
 Read by `/api/referral-sites?township=...`. Placeholder schema —
 realign per Q14/Q15 once the authoritative directory lands.
 
-### `Referral Log`, `Feedback`
+### `Referral Log` (UI label: "Screening Referral Log")
 
-Existing operational tabs from v0.2. Schema is in
-`SESSIONS_HEADERS`-style constants exported from
-`src/lib/googleSheets.ts` and refreshed by `/api/admin/seed-headers`.
+Operational tab from v0.2. Schema lives in `seed-headers/route.ts`.
+Holds: client info + referral type + screening ID + follow-up
+tracking (contact attempts, client contacted, referral given by
+Telehealth, arrived at centre, CXR completed/result, Xpert
+completed/result). Edited via the **SCH Telehealth View**
+dashboard.
+
+> **TODO**: align with the old SCH FB-bot **outcome enum** (Reached /
+> Lost / Referred / TB / Non-TB) plus Final Diagnosis + TB
+> Registration ID + TB Registration Date columns. See
+> `docs/FB-BOT-COMPARISON.md` §"Recommendations" for the rationale.
+
+### `Care Referral Log`
+
+New tab introduced in v0.6 for care-provider referrals (the
+downstream of a P3 patient/caregiver conversation, when built). Read
+by **TB Screening Provider View** (read-only); read+edit by **TB Care
+Provider View** and the **SCH Admin View**.
+
+Schema: `careReferralId · conversationId · timestamp · clientName ·
+clientAge · clientGender · careProviderName ·
+careProviderTownship · careProviderContact · reasonForReferral ·
+status (Pending / Contacted / In Care / Closed / Lost) ·
+followUpDate · notes`
+
+> **TODO**: realign with the SCH care-provider directory when SCH
+> provides one (similar to the Q14 dependency on the screening-side
+> directory).
+
+### `Feedback`
+
+Existing operational tab from v0.2.
 
 ### Admin endpoints (idempotent — safe to re-run)
 
 | Endpoint                                | Action                                                    |
 |-----------------------------------------|-----------------------------------------------------------|
-| `GET /api/admin/seed-headers`           | Refresh row 1 of every tab to the latest schema.          |
+| `GET /api/admin/seed-headers`           | Refresh row 1 of every tab to the latest schema. **In v0.6 this also creates the `Care Referral Log` tab if missing.** |
 | `GET /api/admin/seed-language-map`      | Append rows for any new keys in `BOT_MESSAGES` / `RESPONSE_OPTIONS` / question text+explanation. Never overwrites edits. |
 | `GET /api/admin/seed-locations`         | Append rows for any new placeholder locations.            |
+
+### Role-based dashboards + mock auth
+
+Every dashboard is gated by a **client-side `AuthGate`** component
+(`src/components/AuthGate.tsx`). It accepts username `123` and password
+`abc` only; the auth state is held in `sessionStorage` per role. This
+is **prototype-only** — production must replace `AuthGate` with the
+SCH-approved auth flow (SSO / OIDC against SCH's identity provider).
+
+| Route | View name | Data | Permissions |
+|-------|-----------|------|-------------|
+| `/admin`               | SCH Admin View              | All sheets + link to the Google Sheet itself + by-destination referral summary | Full read+edit |
+| `/telehealth`          | SCH Telehealth View         | Screening Referral Log only          | Read + edit follow-up tracking |
+| `/screening-provider`  | TB Screening Provider View  | Care Referral Log only               | Read-only |
+| `/care-provider`       | TB Care Provider View       | Care Referral Log only               | Read + edit care-provider + status + follow-up + notes |
 
 ## 7. Referral letter — Q17 contract
 
@@ -350,7 +395,59 @@ pipeline + escalation rules + KB source map. Production build should
 treat P3 as a separate microservice — different scale, different
 guardrails, different infrastructure cost profile.
 
-## 11. Open items / TODOs in code
+## 11. Comparison with the old SCH FB self-check bot (Jun 2022)
+
+See **`docs/FB-BOT-COMPARISON.md`** for the full diff. Key takeaways
+the engineering team should keep in mind:
+
+- **Pediatric pathway (5–14)** — the old bot screens 5–14-year-olds
+  with a 2+ Yes threshold. We currently exclude under-15. Either
+  build a parallel pediatric pass or get SCH's explicit sign-off
+  that we are intentionally narrower than the existing bot.
+- **Outcome enum** — the old bot uses `Reached / Lost / Referred`
+  + final-diagnosis (TB / Non-TB) + TB Registration ID. We have
+  `status: in_progress / completed / abandoned`. The production
+  schema should adopt the old-bot enum so Tele-Health's existing
+  workflow translates directly.
+- **2-week / 2-attempt follow-up SLA** — the old bot encodes this
+  rule (first follow-up at 2–3 days, last at 2 weeks, "Lost" after
+  the second failed contact). Worth surfacing in the production
+  service contract for the Tele-Health team.
+- **Symptom-phrasing equivalence** — old bot's "evening rise in
+  temperature" ≈ our "fever with night sweats"; old bot's "cervical
+  lymph node" ≈ our "fatigue or neck lump". Useful for cross-bot
+  analytics.
+
+## 12. Surface rename audit — "TB Self-Screening Bot" → "SCH TB Chatbot"
+
+Done in code (this iteration, v0.6.0):
+
+- Chat window header
+- README title + handoff doc title
+- Admin / Telehealth / Screening Provider / Care Provider page
+  titles + `<h1>`s
+- `package.json` name → `sch-tb-chatbot`
+
+**Items Raj needs to change manually** (not safe to do from inside
+the prototype without his sign-off):
+
+| Surface | Current | Suggested new | Notes |
+|---------|---------|---------------|-------|
+| GitHub repo name | `natarajanrajaraman/tb-screening-chatbot` | `natarajanrajaraman/sch-tb-chatbot` | GitHub auto-redirects from the old URL for ~1 year, so existing clones keep working. Webhooks etc. should be re-checked. |
+| Vercel project name | `tb-screening-chatbot` | `sch-tb-chatbot` | In Vercel project Settings → General. |
+| Vercel default URL | `tb-screening-chatbot.vercel.app` | `sch-tb-chatbot.vercel.app` | Vercel mints a new default URL when the project is renamed; the old URL stops working unless you add an alias for it. Decide whether to keep the old URL alive as an alias for any existing screenshots / shared links. |
+| Google Sheet title | "TB Self-Screening Chatbot — Database [PROTOTYPE]" | "SCH TB Chatbot — Database [PROTOTYPE]" | Manual rename in Drive (right-click the file). Sheet IDs are unchanged so the prototype keeps reading/writing it. |
+
+**Not changeable**:
+
+- Old Vercel preview deployment URLs (one per push) — they bake
+  the project name in at creation time and don't update
+  retroactively. Will continue to work; will continue to show the
+  old name in the URL.
+- Bookmarks, slides, screenshots that already reference the old
+  name — those are out of our reach.
+
+## 13. Open items / TODOs in code
 
 These markers exist in the source — search for them on handoff:
 

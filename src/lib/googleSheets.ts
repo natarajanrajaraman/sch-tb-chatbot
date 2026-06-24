@@ -244,6 +244,63 @@ export async function getAllReferralLogs(): Promise<string[][]> {
   }
 }
 
+// ----- Care Referral Log -----
+// New tab introduced in v0.6 for referrals to TB care providers (e.g.
+// initiated during the P3 patient/caregiver conversation). Kept separate from
+// the screening-referral flow so the SCH Telehealth team's caseload stays
+// distinct from the TB Care Provider's caseload.
+//
+// Schema (provisional — TODO realign with SCH care-provider directory once
+// available):
+//   A  careReferralId
+//   B  conversationId
+//   C  timestamp
+//   D  clientName
+//   E  clientAge
+//   F  clientGender
+//   G  careProviderName
+//   H  careProviderTownship
+//   I  careProviderContact
+//   J  reasonForReferral
+//   K  status              (Pending / Contacted / In Care / Closed / Lost)
+//   L  followUpDate
+//   M  notes
+export const CARE_REFERRAL_LOG_HEADERS = [
+  'careReferralId', 'conversationId', 'timestamp',
+  'clientName', 'clientAge', 'clientGender',
+  'careProviderName', 'careProviderTownship', 'careProviderContact',
+  'reasonForReferral',
+  'status', 'followUpDate', 'notes',
+];
+
+export async function saveCareReferralLog(row: Record<string, string>): Promise<void> {
+  const ordered = CARE_REFERRAL_LOG_HEADERS.map(h => row[h] || '');
+  await appendToSheet('Care Referral Log', [ordered]);
+}
+
+export async function getAllCareReferralLogs(): Promise<string[][]> {
+  try {
+    return await getSheetValues('Care Referral Log', 'A1:M2000');
+  } catch {
+    return [];
+  }
+}
+
+export async function updateCareReferralLog(
+  careReferralId: string,
+  patch: Partial<Record<string, string>>
+): Promise<boolean> {
+  const allData = await getSheetValues('Care Referral Log', 'A1:M2000');
+  const rowIndex = allData.findIndex(row => row[0] === careReferralId);
+  if (rowIndex < 0) return false;
+  const sheetRow = rowIndex + 1;
+  // Update G..M cells (careProviderName .. notes)
+  const editableCols = ['careProviderName', 'careProviderTownship', 'careProviderContact', 'reasonForReferral', 'status', 'followUpDate', 'notes'];
+  const values = [editableCols.map(c => patch[c] ?? allData[rowIndex][CARE_REFERRAL_LOG_HEADERS.indexOf(c)] ?? '')];
+  await updateSheetCells('Care Referral Log', `G${sheetRow}:M${sheetRow}`, values);
+  return true;
+}
+
 // ----- Language Map -----
 // Columns: A=key, B=english, C=burmese, D=notes
 export interface LanguageMapEntry {

@@ -1,7 +1,8 @@
-# TB Self-Check Chatbot — prototype
+# SCH TB Chatbot — prototype
 
 This Next.js app is the **behaviour-validation prototype** for SCH's
-TB Self-Check chatbot. It exists to lock the conversation flow,
+TB Self-Check chatbot (Product 1) and TB patient/caregiver info
+chatbot (Product 3, stubbed). It exists to lock the conversation flow,
 Burmese wording, and SCH's business rules (Q6 classification, Q17
 referral letter, Q9 phone-contact consent, Q16 cascade) before
 engineering rebuilds the same flows on Viber Bot API / FB Messenger /

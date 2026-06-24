@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { seedHeaders, SESSIONS_HEADERS } from '@/lib/googleSheets';
+import { seedHeaders, SESSIONS_HEADERS, CARE_REFERRAL_LOG_HEADERS } from '@/lib/googleSheets';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -35,6 +35,10 @@ const SPEC = [
     sheetName: 'Referral Directory',
     headers: ['site_id', 'facility_name', 'facility_name_mm', 'township', 'township_mm',
       'address', 'phone', 'services', 'operating_hours', 'type', 'notes'],
+  },
+  {
+    sheetName: 'Care Referral Log',
+    headers: CARE_REFERRAL_LOG_HEADERS,
   },
 ];
 

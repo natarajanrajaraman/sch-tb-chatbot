@@ -315,8 +315,8 @@ export default function ChatWindow({
           {theme.avatarIcon}
         </div>
         <div className="flex-1">
-          <div className="font-semibold" style={{ fontSize: theme.fontSize }}>TB Self-Screening Bot</div>
-          <div className="opacity-75" style={{ fontSize: '11px' }}>တီဘီ ကိုယ်တိုင်စစ်ဆေးခြင်း</div>
+          <div className="font-semibold" style={{ fontSize: theme.fontSize }}>SCH TB Chatbot</div>
+          <div className="opacity-75" style={{ fontSize: '11px' }}>"နေ" ဆေးခန်း တီဘီ Chatbot</div>
         </div>
         <span className="text-lg">{theme.headerIcon}</span>
       </div>

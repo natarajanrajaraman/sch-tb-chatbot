@@ -1,13 +1,17 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import AuthGate from '@/components/AuthGate';
 
-type TabType = 'dashboard' | 'sessions' | 'feedback' | 'referral-log';
+type TabType = 'dashboard' | 'sessions' | 'feedback' | 'referral-log' | 'care-referral-log';
+
+const SPREADSHEET_URL = 'https://docs.google.com/spreadsheets/d/1WNOvqyienkQNjF5ECUIPq5w30qaAVDQe0cuJrBv2P6w';
 
 interface DashboardStats {
   totalScreenings: number;
   completedScreenings: number;
   presumptiveTB: number;
+  negHighRisk: number;
   notPresumptiveTB: number;
   assistedReferrals: number;
   selfReferrals: number;
@@ -15,49 +19,95 @@ interface DashboardStats {
   presumptiveRate: string;
 }
 
+interface ProviderSummary {
+  label: string;
+  count: number;
+}
+
 export default function AdminPage() {
+  return (
+    <AuthGate roleKey="sch-admin" roleLabel="SCH Admin View">
+      <AdminInner />
+    </AuthGate>
+  );
+}
+
+function AdminInner() {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const [sessions, setSessions] = useState<string[][]>([]);
   const [feedback, setFeedback] = useState<string[][]>([]);
   const [referralLogs, setReferralLogs] = useState<string[][]>([]);
+  const [careReferralLogs, setCareReferralLogs] = useState<string[][]>([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [byProvider, setByProvider] = useState<ProviderSummary[]>([]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [sessRes, fbRes, refRes] = await Promise.all([
+      const [sessRes, fbRes, refRes, careRes] = await Promise.all([
         fetch('/api/session'),
         fetch('/api/feedback'),
         fetch('/api/referral-log'),
+        fetch('/api/care-referral-log'),
       ]);
       const sessData = await sessRes.json();
       const fbData = await fbRes.json();
       const refData = await refRes.json();
+      const careData = await careRes.json();
 
       setSessions(sessData.data || []);
       setFeedback(fbData.data || []);
       setReferralLogs(refData.data || []);
+      setCareReferralLogs(careData.data || []);
 
-      // Calculate stats from session data
-      const rows = (sessData.data || []).slice(1); // Skip header
-      const completed = rows.filter((r: string[]) => r[23] === 'completed');
-      const presumptive = rows.filter((r: string[]) => r[17] === 'Presumptive TB');
-      const notPresumptive = rows.filter((r: string[]) => r[17] === 'Not Presumptive TB');
-      const assisted = rows.filter((r: string[]) => r[18] === 'Assisted');
-      const self = rows.filter((r: string[]) => r[18] === 'Self');
-      const excluded = rows.filter((r: string[]) => r[24] === 'Yes');
+      // Calculate stats from session data — resolve column positions from
+      // the header row so we stay correct across schema changes.
+      const allRows = sessData.data || [];
+      const headers: string[] = allRows[0] || [];
+      const rows: string[][] = allRows.slice(1);
+      const col = (name: string) => headers.findIndex(h => h === name);
+      const cClassification = col('classification');
+      const cReferralType = col('referralType');
+      const cStatus = col('status');
+      const cUnder15 = col('under15Excluded');
+      const cTownship = col('referralTownship');
+      const cFacility = col('referralSitesShown');
+
+      const completed = rows.filter(r => r[cStatus] === 'completed');
+      const presumptive = rows.filter(r => r[cClassification] === 'Presumptive TB');
+      const negHighRisk = rows.filter(r => r[cClassification] === 'Negative (High Risk)');
+      const notPresumptive = rows.filter(r => r[cClassification] === 'Not Presumptive TB');
+      const assisted = rows.filter(r => r[cReferralType] === 'Assisted');
+      const self = rows.filter(r => r[cReferralType] === 'Self');
+      const excluded = rows.filter(r => r[cUnder15] === 'Yes');
+
+      // By-provider/township summary — count referrals grouped by destination
+      const providerCounts: Record<string, number> = {};
+      for (const r of rows) {
+        const facility = (r[cFacility] || '').trim();
+        const township = (r[cTownship] || '').trim();
+        const key = facility ? `${facility}${township ? ` · ${township}` : ''}` : township || '(unknown)';
+        if (r[cReferralType] === 'Assisted' || r[cReferralType] === 'Self') {
+          providerCounts[key] = (providerCounts[key] || 0) + 1;
+        }
+      }
+      const byProvider = Object.entries(providerCounts)
+        .map(([label, count]) => ({ label, count }))
+        .sort((a, b) => b.count - a.count);
+      setByProvider(byProvider);
 
       setStats({
         totalScreenings: rows.length,
         completedScreenings: completed.length,
         presumptiveTB: presumptive.length,
+        negHighRisk: negHighRisk.length,
         notPresumptiveTB: notPresumptive.length,
         assistedReferrals: assisted.length,
         selfReferrals: self.length,
         under15Excluded: excluded.length,
         presumptiveRate: rows.length > 0
-          ? ((presumptive.length / Math.max(1, presumptive.length + notPresumptive.length)) * 100).toFixed(1) + '%'
+          ? ((presumptive.length / Math.max(1, presumptive.length + negHighRisk.length + notPresumptive.length)) * 100).toFixed(1) + '%'
           : 'N/A',
       });
     } catch (error) {
@@ -74,7 +124,8 @@ export default function AdminPage() {
     { id: 'dashboard', label: 'Dashboard', icon: '📊' },
     { id: 'sessions', label: 'Sessions', icon: '💬' },
     { id: 'feedback', label: 'Feedback', icon: '📝' },
-    { id: 'referral-log', label: 'Referral Log', icon: '🏥' },
+    { id: 'referral-log', label: 'Screening Referral Log', icon: '🏥' },
+    { id: 'care-referral-log', label: 'Care Referral Log', icon: '🤝' },
   ];
 
   return (
@@ -82,8 +133,18 @@ export default function AdminPage() {
       {/* Header */}
       <div className="bg-gray-800 text-white px-6 py-4 flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-bold">TB Screening Chatbot — Admin Dashboard</h1>
-          <p className="text-xs text-gray-400">Database: Google Sheets</p>
+          <h1 className="text-lg font-bold">SCH Admin View — SCH TB Chatbot</h1>
+          <p className="text-xs text-gray-400">
+            Database:{' '}
+            <a
+              href={SPREADSHEET_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-400 hover:underline"
+            >
+              TB Self-Screening Chatbot — Database [PROTOTYPE] ↗
+            </a>
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -121,10 +182,11 @@ export default function AdminPage() {
           <div className="text-center py-12 text-gray-500">Loading data...</div>
         ) : (
           <>
-            {activeTab === 'dashboard' && stats && <DashboardView stats={stats} />}
+            {activeTab === 'dashboard' && stats && <DashboardView stats={stats} byProvider={byProvider} />}
             {activeTab === 'sessions' && <DataTable data={sessions} title="Sessions" />}
             {activeTab === 'feedback' && <DataTable data={feedback} title="Feedback" />}
             {activeTab === 'referral-log' && <ReferralLogTable data={referralLogs} onRefresh={fetchData} />}
+            {activeTab === 'care-referral-log' && <DataTable data={careReferralLogs} title="Care Referral Log" />}
           </>
         )}
       </div>
@@ -132,11 +194,12 @@ export default function AdminPage() {
   );
 }
 
-function DashboardView({ stats }: { stats: DashboardStats }) {
+function DashboardView({ stats, byProvider }: { stats: DashboardStats; byProvider: ProviderSummary[] }) {
   const cards = [
     { label: 'Total Screenings', value: stats.totalScreenings, color: 'bg-blue-500' },
     { label: 'Completed', value: stats.completedScreenings, color: 'bg-green-500' },
     { label: 'Presumptive TB', value: stats.presumptiveTB, color: 'bg-red-500' },
+    { label: 'Negative (High Risk)', value: stats.negHighRisk, color: 'bg-amber-500' },
     { label: 'Not Presumptive', value: stats.notPresumptiveTB, color: 'bg-emerald-500' },
     { label: 'Presumptive Rate', value: stats.presumptiveRate, color: 'bg-orange-500' },
     { label: 'Assisted Referrals', value: stats.assistedReferrals, color: 'bg-purple-500' },
@@ -158,6 +221,39 @@ function DashboardView({ stats }: { stats: DashboardStats }) {
           </div>
         ))}
       </div>
+
+      {/* Referrals by destination provider / township */}
+      <div className="mt-8">
+        <h3 className="text-base font-bold text-gray-800 mb-2">Referrals by destination</h3>
+        <p className="text-xs text-gray-500 mb-3">
+          Grouped by destination facility · township from the Sessions sheet.
+        </p>
+        {byProvider.length === 0 ? (
+          <div className="bg-white rounded-lg shadow-sm p-4 text-center text-gray-400 text-sm">
+            No referrals yet.
+          </div>
+        ) : (
+          <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 border-b">
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Destination</th>
+                  <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600 uppercase tracking-wide">Referrals</th>
+                </tr>
+              </thead>
+              <tbody>
+                {byProvider.map(p => (
+                  <tr key={p.label} className="border-b last:border-b-0">
+                    <td className="px-4 py-2 text-gray-700">{p.label}</td>
+                    <td className="px-4 py-2 text-right font-semibold text-gray-900">{p.count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
       {stats.totalScreenings === 0 && (
         <div className="mt-8 text-center text-gray-400 py-8">
           No screening data yet. Complete a screening in the chatbot to see data here.
@@ -242,9 +338,9 @@ function ReferralLogTable({ data, onRefresh }: { data: string[][]; onRefresh: ()
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-bold text-gray-800">Referral Log ({rows.length} records)</h2>
+        <h2 className="text-lg font-bold text-gray-800">Screening Referral Log ({rows.length} records)</h2>
         <button
-          onClick={() => downloadCSV(data, 'Referral Log')}
+          onClick={() => downloadCSV(data, 'Screening Referral Log')}
           className="px-3 py-1.5 bg-green-600 text-white text-xs rounded-md hover:bg-green-700 transition-colors"
         >
           Download CSV
