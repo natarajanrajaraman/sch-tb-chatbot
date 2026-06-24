@@ -8,7 +8,7 @@ import { BOT_MESSAGES } from '@/data/messages';
 import { t } from './textRegistry';
 import { getStates, getDistricts, getTownships } from './locationRegistry';
 
-export const BOT_VERSION = '0.4.0';
+export const BOT_VERSION = '0.5.0';
 
 export type ConversationState =
   | 'LANDING'
@@ -148,18 +148,148 @@ export function getSymptomQuestionByIndex(index: number): ScreeningQuestion | nu
   return SYMPTOM_QUESTIONS[index - 1] || null;
 }
 
-export function getScreeningActionOptions(): MessageOption[] {
-  const explain = t('opt.screening_action.explain', RESPONSE_OPTIONS.screening_action.explain);
-  const back = t('opt.screening_action.back', RESPONSE_OPTIONS.screening_action.back);
-  const exit = t('opt.screening_action.exit', RESPONSE_OPTIONS.screening_action.exit);
-  return [
-    { id: 'act_explain', labelMm: explain.mm, labelEn: explain.en },
-    { id: 'act_back', labelMm: back.mm, labelEn: back.en },
-    { id: 'act_exit', labelMm: exit.mm, labelEn: exit.en },
-  ];
+export interface ActionConfig {
+  explain: boolean;
+  back: boolean;
+  exit: boolean;
 }
 
-export function buildScreeningQuestionMessage(question: ScreeningQuestion): Message {
+// Action buttons (Explain / Back / Exit) per state. Symptom and risk-factor
+// states are handled by getActionConfigForState() below because they're
+// parametric.
+const ACTION_CONFIGS: Partial<Record<ConversationState, ActionConfig>> = {
+  ASK_AGE:                    { explain: false, back: false, exit: true  },
+  ASK_NAME:                   { explain: false, back: true,  exit: true  },
+  ASK_GENDER:                 { explain: false, back: true,  exit: true  },
+  REFERRAL_CHOICE:            { explain: true,  back: true,  exit: true  },
+  ASSISTED_CONSENT:           { explain: true,  back: true,  exit: true  },
+  ASSISTED_ASK_PHONE:         { explain: false, back: true,  exit: true  },
+  SELF_ASK_STATE:             { explain: false, back: true,  exit: true  },
+  SELF_ASK_DISTRICT:          { explain: false, back: true,  exit: true  },
+  SELF_ASK_TOWNSHIP:          { explain: false, back: true,  exit: true  },
+  SELF_ASK_TOWNSHIP_FREEFORM: { explain: false, back: true,  exit: true  },
+  SELF_ASK_CONTACT:           { explain: false, back: true,  exit: true  },
+};
+
+export function getActionConfigForState(state: ConversationState): ActionConfig {
+  if (typeof state === 'string' && (state.startsWith('SYMPTOM_') || state.startsWith('RISK_FACTOR_'))) {
+    return { explain: true, back: true, exit: true };
+  }
+  return ACTION_CONFIGS[state] || { explain: false, back: false, exit: false };
+}
+
+export function getScreeningActionOptions(): MessageOption[] {
+  return buildActionOptions({ explain: true, back: true, exit: true });
+}
+
+export function buildActionOptions(cfg: ActionConfig): MessageOption[] {
+  const out: MessageOption[] = [];
+  if (cfg.explain) {
+    const explain = t('opt.screening_action.explain', RESPONSE_OPTIONS.screening_action.explain);
+    out.push({ id: 'act_explain', labelMm: explain.mm, labelEn: explain.en });
+  }
+  if (cfg.back) {
+    const back = t('opt.screening_action.back', RESPONSE_OPTIONS.screening_action.back);
+    out.push({ id: 'act_back', labelMm: back.mm, labelEn: back.en });
+  }
+  if (cfg.exit) {
+    const exit = t('opt.screening_action.exit', RESPONSE_OPTIONS.screening_action.exit);
+    out.push({ id: 'act_exit', labelMm: exit.mm, labelEn: exit.en });
+  }
+  return out;
+}
+
+// Appends action buttons to a bot message based on the state the user is now
+// in. Idempotent — drops any already-appended action options first.
+export function withScreeningActions(msg: Message, state: ConversationState): Message {
+  const cfg = getActionConfigForState(state);
+  const actions = buildActionOptions(cfg);
+  if (actions.length === 0) return msg;
+  const stripped = (msg.options || []).filter(
+    o => o.id !== 'act_explain' && o.id !== 'act_back' && o.id !== 'act_exit'
+  );
+  return {
+    ...msg,
+    options: [...stripped, ...actions],
+    optionType: msg.optionType || 'single',
+  };
+}
+
+// Rebuilds the message the bot should be showing while the user is in the
+// given state. Used after "What does this mean?" so we can re-display the
+// question, and after a Back tap when we're returning to a state that isn't
+// a symptom/RF question. Returns null when there's no canonical message for
+// the state (terminal states, free-text-only states).
+export function rebuildCurrentMessage(state: ConversationState, session: SessionData): Message | null {
+  if (typeof state === 'string' && state.startsWith('SYMPTOM_')) {
+    const idx = parseInt(state.replace('SYMPTOM_', ''), 10);
+    const q = SYMPTOM_QUESTIONS[idx - 1];
+    return q ? buildScreeningQuestionMessage(q) : null;
+  }
+  if (typeof state === 'string' && state.startsWith('RISK_FACTOR_')) {
+    const idx = parseInt(state.replace('RISK_FACTOR_', ''), 10);
+    const q = RISK_FACTOR_QUESTIONS[idx - 1];
+    return q ? buildScreeningQuestionMessage(q) : null;
+  }
+  switch (state) {
+    case 'REFERRAL_CHOICE': {
+      const assisted = t('opt.referral_type.assisted', RESPONSE_OPTIONS.referral_type.assisted);
+      const self = t('opt.referral_type.self', RESPONSE_OPTIONS.referral_type.self);
+      return withScreeningActions(
+        createBotMessage(t('msg.result_presumptive', BOT_MESSAGES.result_presumptive), [
+          { id: 'assisted', labelMm: assisted.mm, labelEn: assisted.en },
+          { id: 'self', labelMm: self.mm, labelEn: self.en },
+        ]),
+        'REFERRAL_CHOICE'
+      );
+    }
+    case 'ASSISTED_CONSENT': {
+      const yes = t('opt.consent.yes', RESPONSE_OPTIONS.consent.yes);
+      const no = t('opt.consent.no', RESPONSE_OPTIONS.consent.no);
+      return withScreeningActions(
+        createBotMessage(t('msg.assisted_referral_consent', BOT_MESSAGES.assisted_referral_consent), [
+          { id: 'consent_yes', labelMm: yes.mm, labelEn: yes.en },
+          { id: 'consent_no', labelMm: no.mm, labelEn: no.en },
+        ]),
+        'ASSISTED_CONSENT'
+      );
+    }
+    case 'SELF_ASK_STATE':
+      return withScreeningActions(buildStateChoiceMessage(), 'SELF_ASK_STATE');
+    case 'SELF_ASK_DISTRICT':
+      return withScreeningActions(
+        buildDistrictChoiceMessage(session.referralStateRegion || ''),
+        'SELF_ASK_DISTRICT'
+      );
+    case 'SELF_ASK_TOWNSHIP':
+      return withScreeningActions(
+        buildTownshipChoiceMessage(session.referralStateRegion || '', session.referralDistrict || ''),
+        'SELF_ASK_TOWNSHIP'
+      );
+    default:
+      return null;
+  }
+}
+
+// Per-state explanation when user taps "What does this mean?". Returns null if
+// the state doesn't have a generic explanation (symptom/RF questions have
+// per-question explanations handled separately by buildExplanationMessage).
+export function getExplanationForState(state: ConversationState): Message | null {
+  if (state === 'REFERRAL_CHOICE') {
+    const body = t('msg.explain_referral_choice', BOT_MESSAGES.explain_referral_choice);
+    return { id: generateId(), sender: 'bot', textMm: body.mm, textEn: body.en, timestamp: Date.now() };
+  }
+  if (state === 'ASSISTED_CONSENT') {
+    const body = t('msg.explain_assisted_consent', BOT_MESSAGES.explain_assisted_consent);
+    return { id: generateId(), sender: 'bot', textMm: body.mm, textEn: body.en, timestamp: Date.now() };
+  }
+  return null;
+}
+
+// Builds the question text + yes/no buttons. Action buttons (explain / back /
+// exit) are appended afterwards via withScreeningActions(), so the same builder
+// is reusable when re-displaying a question after a Back tap.
+function buildScreeningQuestionMessageBare(question: ScreeningQuestion): Message {
   const qText = t(`question.${question.id}.text`, { en: question.textEn, mm: question.textMm });
   const yes = t('opt.yes_no.yes', RESPONSE_OPTIONS.yes_no.yes);
   const no = t('opt.yes_no.no', RESPONSE_OPTIONS.yes_no.no);
@@ -175,10 +305,16 @@ export function buildScreeningQuestionMessage(question: ScreeningQuestion): Mess
     options: [
       { id: 'yes', labelMm: yes.mm, labelEn: yes.en },
       { id: 'no', labelMm: no.mm, labelEn: no.en },
-      ...getScreeningActionOptions(),
     ],
     optionType: 'single',
   };
+}
+
+export function buildScreeningQuestionMessage(question: ScreeningQuestion): Message {
+  const state = (question.category === 'symptom'
+    ? `SYMPTOM_${question.index}`
+    : `RISK_FACTOR_${question.index}`) as ConversationState;
+  return withScreeningActions(buildScreeningQuestionMessageBare(question), state);
 }
 
 // Legacy alias used by ChatWindow
@@ -220,6 +356,162 @@ export function buildExitMessage(): Message {
     options: getEndOptions(),
     optionType: 'single',
   };
+}
+
+// ----- Back navigation -----
+// For every state, returns either { atFirst: true } (no previous step) or a
+// concrete previous state + the message to re-show + the session with the
+// just-recorded answer cleared.
+
+export type BackResult =
+  | { atFirst: true }
+  | { atFirst?: false; prevState: ConversationState; prevMessage: Message; updatedSession: SessionData };
+
+export function goBack(state: ConversationState, session: SessionData): BackResult {
+  const updated: SessionData = { ...session, symptoms: { ...session.symptoms }, riskFactors: { ...session.riskFactors } };
+
+  // Symptom Q
+  if (typeof state === 'string' && state.startsWith('SYMPTOM_')) {
+    const idx = parseInt(state.replace('SYMPTOM_', ''), 10);
+    if (idx <= 1) return { atFirst: true };
+    const prevQ = SYMPTOM_QUESTIONS[idx - 2];
+    delete updated.symptoms[prevQ.id];
+    return {
+      prevState: `SYMPTOM_${idx - 1}` as ConversationState,
+      prevMessage: buildScreeningQuestionMessage(prevQ),
+      updatedSession: updated,
+    };
+  }
+
+  // Risk-factor Q (RF1 → S8)
+  if (typeof state === 'string' && state.startsWith('RISK_FACTOR_')) {
+    const idx = parseInt(state.replace('RISK_FACTOR_', ''), 10);
+    if (idx <= 1) {
+      const s8 = SYMPTOM_QUESTIONS[7];
+      delete updated.symptoms[s8.id];
+      return {
+        prevState: 'SYMPTOM_8' as ConversationState,
+        prevMessage: buildScreeningQuestionMessage(s8),
+        updatedSession: updated,
+      };
+    }
+    const prevQ = RISK_FACTOR_QUESTIONS[idx - 2];
+    delete updated.riskFactors[prevQ.id];
+    return {
+      prevState: `RISK_FACTOR_${idx - 1}` as ConversationState,
+      prevMessage: buildScreeningQuestionMessage(prevQ),
+      updatedSession: updated,
+    };
+  }
+
+  switch (state) {
+    case 'ASK_NAME': {
+      // Back to RF10 (clears RF10 answer)
+      const rf10 = RISK_FACTOR_QUESTIONS[9];
+      delete updated.riskFactors[rf10.id];
+      return {
+        prevState: 'RISK_FACTOR_10',
+        prevMessage: buildScreeningQuestionMessage(rf10),
+        updatedSession: updated,
+      };
+    }
+    case 'ASK_GENDER': {
+      updated.clientName = undefined;
+      const skip = t('msg.skip', BOT_MESSAGES.skip);
+      const msg = withScreeningActions(
+        createBotMessage(t('msg.ask_name', BOT_MESSAGES.ask_name), [
+          { id: 'skip', labelMm: skip.mm, labelEn: skip.en },
+        ]),
+        'ASK_NAME'
+      );
+      return { prevState: 'ASK_NAME', prevMessage: msg, updatedSession: updated };
+    }
+    case 'REFERRAL_CHOICE': {
+      updated.clientGender = undefined;
+      const skip = t('msg.skip', BOT_MESSAGES.skip);
+      const male = t('opt.gender.male', RESPONSE_OPTIONS.gender.male);
+      const female = t('opt.gender.female', RESPONSE_OPTIONS.gender.female);
+      const msg = withScreeningActions(
+        createBotMessage(t('msg.ask_gender', BOT_MESSAGES.ask_gender), [
+          { id: 'male', labelMm: male.mm, labelEn: male.en },
+          { id: 'female', labelMm: female.mm, labelEn: female.en },
+          { id: 'skip', labelMm: skip.mm, labelEn: skip.en },
+        ]),
+        'ASK_GENDER'
+      );
+      return { prevState: 'ASK_GENDER', prevMessage: msg, updatedSession: updated };
+    }
+    case 'ASSISTED_CONSENT':
+    case 'SELF_ASK_STATE': {
+      updated.referralType = undefined;
+      const assisted = t('opt.referral_type.assisted', RESPONSE_OPTIONS.referral_type.assisted);
+      const self = t('opt.referral_type.self', RESPONSE_OPTIONS.referral_type.self);
+      const msg = withScreeningActions(
+        createBotMessage(t('msg.result_presumptive', BOT_MESSAGES.result_presumptive), [
+          { id: 'assisted', labelMm: assisted.mm, labelEn: assisted.en },
+          { id: 'self', labelMm: self.mm, labelEn: self.en },
+        ]),
+        'REFERRAL_CHOICE'
+      );
+      return { prevState: 'REFERRAL_CHOICE', prevMessage: msg, updatedSession: updated };
+    }
+    case 'ASSISTED_ASK_PHONE': {
+      updated.consentToPhoneContact = undefined;
+      const yes = t('opt.consent.yes', RESPONSE_OPTIONS.consent.yes);
+      const no = t('opt.consent.no', RESPONSE_OPTIONS.consent.no);
+      const msg = withScreeningActions(
+        createBotMessage(t('msg.assisted_referral_consent', BOT_MESSAGES.assisted_referral_consent), [
+          { id: 'consent_yes', labelMm: yes.mm, labelEn: yes.en },
+          { id: 'consent_no', labelMm: no.mm, labelEn: no.en },
+        ]),
+        'ASSISTED_CONSENT'
+      );
+      return { prevState: 'ASSISTED_CONSENT', prevMessage: msg, updatedSession: updated };
+    }
+    case 'SELF_ASK_DISTRICT': {
+      updated.referralStateRegion = undefined;
+      return {
+        prevState: 'SELF_ASK_STATE',
+        prevMessage: withScreeningActions(buildStateChoiceMessage(), 'SELF_ASK_STATE'),
+        updatedSession: updated,
+      };
+    }
+    case 'SELF_ASK_TOWNSHIP': {
+      updated.referralDistrict = undefined;
+      return {
+        prevState: 'SELF_ASK_DISTRICT',
+        prevMessage: withScreeningActions(
+          buildDistrictChoiceMessage(updated.referralStateRegion || ''),
+          'SELF_ASK_DISTRICT'
+        ),
+        updatedSession: updated,
+      };
+    }
+    case 'SELF_ASK_TOWNSHIP_FREEFORM': {
+      // Back to the township button menu (keeps state+district context)
+      return {
+        prevState: 'SELF_ASK_TOWNSHIP',
+        prevMessage: withScreeningActions(
+          buildTownshipChoiceMessage(updated.referralStateRegion || '', updated.referralDistrict || ''),
+          'SELF_ASK_TOWNSHIP'
+        ),
+        updatedSession: updated,
+      };
+    }
+    case 'SELF_ASK_CONTACT': {
+      updated.referralTownship = undefined;
+      return {
+        prevState: 'SELF_ASK_TOWNSHIP',
+        prevMessage: withScreeningActions(
+          buildTownshipChoiceMessage(updated.referralStateRegion || '', updated.referralDistrict || ''),
+          'SELF_ASK_TOWNSHIP'
+        ),
+        updatedSession: updated,
+      };
+    }
+    default:
+      return { atFirst: true };
+  }
 }
 
 export function getLandingMessage(): Message {
@@ -322,6 +614,18 @@ export function buildTownshipChoiceMessage(stateEn: string, districtEn: string):
 // ----- Main state machine -----
 
 export function processUserInput(
+  state: ConversationState,
+  input: string,
+  session: SessionData
+): { nextState: ConversationState; botMessage: Message; updatedSession: SessionData } {
+  const r = processUserInputInner(state, input, session);
+  return {
+    ...r,
+    botMessage: withScreeningActions(r.botMessage, r.nextState),
+  };
+}
+
+function processUserInputInner(
   state: ConversationState,
   input: string,
   session: SessionData

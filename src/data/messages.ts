@@ -116,6 +116,17 @@ export const BOT_MESSAGES = {
     mm: '🔍 သင့်မြို့နယ်အတွက် "နေ" ဆေးခန်း ရှာမတွေ့ပါ။ ဒါပေမယ့် နီးစပ်ရာ မြို့နယ် ဆေးရုံ သို့မဟုတ် တီဘီ ဌာနသို့ သွားရောက်၍ ကုသမှု ခံယူနိုင်ပါသည်။\n\nဆက်လက်ဆောင်ရွက်လိုသည်ကို ရွေးချယ်ပါ:',
     en: '🔍 No Sun GP clinic found for your township. You can still visit the nearest township hospital or TB department for care.\n\nWhat would you like to do next?',
   },
+  // Boilerplate explanation shown if user taps "What does this mean?" at the
+  // Assisted-vs-Self referral choice.
+  explain_referral_choice: {
+    mm: '💡 လမ်းညွှန်ပေးမည် ဆိုသည်မှာ — "နေ" ဆေးခန်း၏ Tele-Health အဖွဲ့မှ သင့်ထံ ဖုန်းခေါ်၍ နီးစပ်ရာ တီဘီ စစ်ဆေးနိုင်သော နေရာသို့ လမ်းညွှန် အကူအညီ ပေးပါမည်။ ဖုန်းနံပါတ်နှင့် ဆက်သွယ်ခွင့် လိုပါသည်။\n\nကိုယ်တိုင်သွားမည် ဆိုသည်မှာ — သင်နေထိုင်ရာ နယ်/မြို့ကို ပြောပြပြီး၊ နီးစပ်ရာ ကျန်းမာရေးဌာန/ဆေးရုံ/ဆေးခန်း စာရင်းကို လက်ဆောင်ရရှိမည်။ Tele-Health မှ ဆက်သွယ်စရာ မလိုဘဲ ကိုယ်တိုင် သွားရောက် စစ်ဆေးနိုင်ပါသည်။\n\nကျေးဇူးပြု၍ ရွေးချယ်ပါ —',
+    en: '💡 Assisted Referral means — the Sun Clinic Tele-Health team will call you and help guide you to a nearby place that can test for TB. We will need your phone number and your consent to be contacted.\n\nSelf-Referral means — you tell us where you live and you will receive a list of nearby health centres / hospitals / clinics, plus a referral slip. You can go on your own without anyone calling you.\n\nPlease choose one —',
+  },
+  explain_assisted_consent: {
+    mm: '💡 "နေ" ဆေးခန်း၏ Tele-Health အဖွဲ့သည် သင်နေထိုင်ရာ မြို့နယ်အလိုက် နီးစပ်သော တီဘီ စစ်ဆေးနိုင်သော နေရာများကို သိရှိပါသည်။ သင်နှင့် ဖုန်းဖြင့် ဆက်သွယ်၍ မည်သည့်နေရာသို့ သွားရမည် နှင့် မည်သို့ ပြင်ဆင်ရမည်ကို လမ်းညွှန်ပေးပါမည်။ သင့်ဆုံးဖြတ်ချက်ကို ရွေးပါ —',
+    en: '💡 The Sun Clinic Tele-Health team knows nearby TB testing locations for each township. They will phone you and guide you to where to go and how to prepare. Please choose —',
+  },
+
   // Q17 — service-availability disclaimer in the e-referral
   referral_disclaimer: {
     mm: 'ဤလွှဲပြောင်းလွှာ (သို့) ဖန်သားပြင်ပုံကို ကျန်းမာရေးဌာန/ဆေးခန်းသို့ သွားရောက်ပြောပြပါ။\n\n⚠️ ဝန်ဆောင်မှု ရရှိနိုင်မှု နှင့် ဝန်ဆောင်ချိန်များသည် စင်တာ၏ လုပ်ငန်းအချိန်ဇယားအလိုက် ပြောင်းလဲနိုင်ပါသည်။ အချက်အလက် (သို့) အကူအညီ လိုအပ်ပါက "နေ" ဆေးခန်း Tele-Health အဖွဲ့ ဖုန်း 09-xxxx ကို ရုံးချိန်အတွင်း ဆက်သွယ်နိုင်ပါသည်။',

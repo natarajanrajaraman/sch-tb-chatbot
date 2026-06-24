@@ -1,3 +1,23 @@
+# TB Self-Check Chatbot — prototype
+
+This Next.js app is the **behaviour-validation prototype** for SCH's
+TB Self-Check chatbot. It exists to lock the conversation flow,
+Burmese wording, and SCH's business rules (Q6 classification, Q17
+referral letter, Q9 phone-contact consent, Q16 cascade) before
+engineering rebuilds the same flows on Viber Bot API / FB Messenger /
+Telegram.
+
+**Engineering handoff doc:** [`docs/PRODUCTION-HANDOFF.md`](docs/PRODUCTION-HANDOFF.md)
+— state machine, Sheet schemas, admin endpoints, open Qs for SCH, and
+the rebuild contract. **Keep it updated in the same commit as any
+behaviour change.**
+
+Bump `BOT_VERSION` in `src/lib/chatEngine.ts` on every behaviour
+change — the value renders on the in-app prototype banner so SCH
+reviewers can cite which version their feedback applies to.
+
+---
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started

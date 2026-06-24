@@ -15,6 +15,10 @@ import {
   buildExplanationMessage,
   buildBackAtFirstMessage,
   buildExitMessage,
+  getActionConfigForState,
+  getExplanationForState,
+  rebuildCurrentMessage,
+  goBack,
 } from '@/lib/chatEngine';
 import { BOT_MESSAGES } from '@/data/messages';
 import { t } from '@/lib/textRegistry';
@@ -205,8 +209,9 @@ export default function ChatWindow({
   }, [conversationState, session, addBotMessageWithDelay, setMessages, setSession, setConversationState]);
 
   const handleScreeningAction = useCallback((actionId: string, labelMm: string, labelEn: string) => {
-    const loc = getQuestionLocationForState(conversationState);
-    if (loc == null) return;
+    const cfg = getActionConfigForState(conversationState);
+    // Sanity: if the current state has no action config, ignore the tap
+    if (!cfg.explain && !cfg.back && !cfg.exit) return;
 
     // Echo the user's tap as a user message
     const userMessage: Message = {
@@ -218,61 +223,45 @@ export default function ChatWindow({
     };
     setMessages((prev: Message[]) => [...prev, userMessage]);
 
-    if (actionId === 'act_explain') {
-      const q = getQuestionByLocation(loc);
-      if (!q) return;
-      addBotMessageWithDelay(buildExplanationMessage(q));
-      setTimeout(() => addBotMessageWithDelay(buildScreeningQuestionMessage(q)), 1400);
-      return;
-    }
-
-    if (actionId === 'act_back') {
-      // Symptom case
-      if (loc.category === 'symptom') {
-        if (loc.index <= 1) {
-          addBotMessageWithDelay(buildBackAtFirstMessage());
-          const q = getQuestionByLocation({ category: 'symptom', index: 1 });
-          if (q) setTimeout(() => addBotMessageWithDelay(buildScreeningQuestionMessage(q)), 1200);
-          return;
+    if (actionId === 'act_explain' && cfg.explain) {
+      // Per-question explanation for symptom/RF states; state-level explanation otherwise
+      const loc = getQuestionLocationForState(conversationState);
+      if (loc) {
+        const q = getQuestionByLocation(loc);
+        if (q) {
+          addBotMessageWithDelay(buildExplanationMessage(q));
+          setTimeout(() => addBotMessageWithDelay(buildScreeningQuestionMessage(q)), 1400);
         }
-        const prevQ = getQuestionByLocation({ category: 'symptom', index: loc.index - 1 });
-        if (!prevQ) return;
-        setSession((prev: SessionData) => {
-          const cleared = { ...prev, symptoms: { ...prev.symptoms } };
-          delete cleared.symptoms[prevQ.id];
-          return cleared;
-        });
-        setConversationState(`SYMPTOM_${loc.index - 1}` as ConversationState);
-        addBotMessageWithDelay(buildScreeningQuestionMessage(prevQ));
         return;
       }
-      // Risk-factor case
-      if (loc.index <= 1) {
-        // Cross-section: RF1 → back to S8 (re-ask the last symptom)
-        const prevQ = getQuestionByLocation({ category: 'symptom', index: 8 });
-        if (!prevQ) return;
-        setSession((prev: SessionData) => {
-          const cleared = { ...prev, symptoms: { ...prev.symptoms } };
-          delete cleared.symptoms[prevQ.id];
-          return cleared;
-        });
-        setConversationState('SYMPTOM_8' as ConversationState);
-        addBotMessageWithDelay(buildScreeningQuestionMessage(prevQ));
-        return;
+      const expl = getExplanationForState(conversationState);
+      if (expl) {
+        addBotMessageWithDelay(expl);
+        const reShow = rebuildCurrentMessage(conversationState, session);
+        if (reShow) setTimeout(() => addBotMessageWithDelay(reShow), 1400);
       }
-      const prevQ = getQuestionByLocation({ category: 'risk_factor', index: loc.index - 1 });
-      if (!prevQ) return;
-      setSession((prev: SessionData) => {
-        const cleared = { ...prev, riskFactors: { ...prev.riskFactors } };
-        delete cleared.riskFactors[prevQ.id];
-        return cleared;
-      });
-      setConversationState(`RISK_FACTOR_${loc.index - 1}` as ConversationState);
-      addBotMessageWithDelay(buildScreeningQuestionMessage(prevQ));
       return;
     }
 
-    if (actionId === 'act_exit') {
+    if (actionId === 'act_back' && cfg.back) {
+      const result = goBack(conversationState, session);
+      if ('atFirst' in result && result.atFirst) {
+        addBotMessageWithDelay(buildBackAtFirstMessage());
+        const reShow = rebuildCurrentMessage(conversationState, session);
+        if (reShow) setTimeout(() => addBotMessageWithDelay(reShow), 1200);
+        return;
+      }
+      if (!('atFirst' in result && result.atFirst)) {
+        // narrow type — we're in the non-atFirst branch here
+        const r = result as { prevState: ConversationState; prevMessage: Message; updatedSession: SessionData };
+        setSession(r.updatedSession);
+        setConversationState(r.prevState);
+        addBotMessageWithDelay(r.prevMessage);
+      }
+      return;
+    }
+
+    if (actionId === 'act_exit' && cfg.exit) {
       setSession((prev: SessionData) => ({
         ...prev,
         status: 'abandoned',
@@ -282,7 +271,7 @@ export default function ChatWindow({
       addBotMessageWithDelay(buildExitMessage());
       return;
     }
-  }, [conversationState, setMessages, setSession, setConversationState, addBotMessageWithDelay]);
+  }, [conversationState, session, setMessages, setSession, setConversationState, addBotMessageWithDelay]);
 
   const handleOptionClick = (optionId: string, labelMm: string, labelEn: string) => {
     // Screening action buttons (What does this mean / Go back / Exit) — handle locally

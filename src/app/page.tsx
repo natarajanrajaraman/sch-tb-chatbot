@@ -11,6 +11,7 @@ import {
   SessionData,
   getWelcomeMessage,
   createInitialSession,
+  BOT_VERSION,
 } from '@/lib/chatEngine';
 import { setOverrides } from '@/lib/textRegistry';
 import { setLocations } from '@/lib/locationRegistry';
@@ -122,7 +123,7 @@ export default function Home() {
           <>
             {/* Panel header */}
             <div className="bg-yellow-400/80 text-yellow-900/70 text-center py-1 px-2 text-[9px] font-bold tracking-wider uppercase shrink-0">
-              PROTOTYPE — FOR INTERNAL TESTING ONLY
+              PROTOTYPE v{BOT_VERSION} — FOR INTERNAL TESTING ONLY
             </div>
 
             {/* Controls section */}
