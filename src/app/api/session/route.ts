@@ -11,6 +11,7 @@ export async function POST(request: NextRequest) {
       completedAt: body.completedAt || new Date().toISOString(),
       platformView: body.platformView,
       landingChoice: body.landingChoice || '',
+      ageGroup: body.ageGroup || '',
       clientName: body.clientName || '',
       clientAge: body.clientAge?.toString() || '',
       clientGender: body.clientGender || '',

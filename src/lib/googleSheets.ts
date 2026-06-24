@@ -90,6 +90,7 @@ export interface SessionRow {
   completedAt: string;
   platformView: string;
   landingChoice: string;
+  ageGroup: string;            // v0.7 — under_5 / pediatric / adult
   clientName: string;
   clientAge: string;
   clientGender: string;
@@ -112,20 +113,21 @@ export interface SessionRow {
 export const SESSIONS_HEADERS = [
   'conversationId', 'startedAt', 'completedAt', 'platformView',     // A-D
   'landingChoice',                                                  // E
-  'clientName', 'clientAge', 'clientGender',                        // F-H
-  // 8 symptoms (I-P)
+  'ageGroup',                                                       // F — v0.7
+  'clientName', 'clientAge', 'clientGender',                        // G-I
+  // 8 symptoms
   'sym_cough_2wks', 'sym_cough_blood_phlegm', 'sym_appetite_loss',
   'sym_weight_loss_gradual', 'sym_fever_night_sweats', 'sym_chest_back_pain',
   'sym_fever_2wks', 'sym_other_fatigue_neck_lump',
-  // 10 risk factors (Q-Z)
+  // 10 risk factors
   'rf_tb_contact', 'rf_immunocompromised', 'rf_diabetes',
   'rf_malnutrition', 'rf_alcohol_heavy', 'rf_smoking',
   'rf_age_60_plus', 'rf_prior_tb', 'rf_chronic_lung', 'rf_crowded_living',
-  // Classification + referral (AA-AH)
+  // Classification + referral
   'classification', 'referralType', 'consentToPhoneContact',
   'referralStateRegion', 'referralDistrict', 'referralTownship',
   'clientPhone', 'referralSitesShown',
-  // Status + meta (AI-AL)
+  // Status + meta
   'status', 'under15Excluded', 'screeningId', 'botVersion',
 ];
 
@@ -149,6 +151,7 @@ export async function saveSession(session: SessionRow): Promise<void> {
     session.completedAt || '',
     session.platformView,
     session.landingChoice || '',
+    session.ageGroup || '',
     session.clientName || '',
     session.clientAge || '',
     session.clientGender || '',
@@ -204,41 +207,84 @@ export async function getAllFeedback(): Promise<string[][]> {
   }
 }
 
+// v0.7 Referral Log schema additions — outcome enum + SLA dates + final dx,
+// per the old SCH FB bot's "Reached / Lost / Referred" model. Old columns
+// (A-T = referralId..xpertResult) are unchanged; new columns extend to AB.
+export const REFERRAL_LOG_HEADERS = [
+  // A-L
+  'referralId', 'conversationId', 'timestamp', 'clientName',
+  'clientAge', 'clientGender', 'referralType', 'township',
+  'facilityNames', 'referred', 'status', 'screeningId',
+  // M-T  (telehealth-editable follow-up — bug fix: writes now start at M, not L)
+  'contactAttempts', 'clientContacted', 'referralGivenByTelehealth',
+  'arrivedAtCenter', 'cxrCompleted', 'cxrResult',
+  'xpertCompleted', 'xpertResult',
+  // U-AB  (v0.7 — old SCH FB bot's outcome / SLA / final dx model)
+  'outcome',          // Pending / Referred / Reached / Lost
+  'patientDx',        // TB / Non-TB
+  'tbRegistrationId',
+  'tbRegistrationDate',
+  'firstContactDate',
+  'firstFollowupDate',
+  'lastFollowupDate',
+  'remarks',
+];
+
+export interface ReferralFollowUp {
+  contactAttempts?: string;
+  clientContacted?: string;
+  referralGivenByTelehealth?: string;
+  arrivedAtCenter?: string;
+  cxrCompleted?: string;
+  cxrResult?: string;
+  xpertCompleted?: string;
+  xpertResult?: string;
+  // v0.7
+  outcome?: string;
+  patientDx?: string;
+  tbRegistrationId?: string;
+  tbRegistrationDate?: string;
+  firstContactDate?: string;
+  firstFollowupDate?: string;
+  lastFollowupDate?: string;
+  remarks?: string;
+}
+
+const EDITABLE_FOLLOWUP_KEYS: (keyof ReferralFollowUp)[] = [
+  'contactAttempts', 'clientContacted', 'referralGivenByTelehealth',
+  'arrivedAtCenter', 'cxrCompleted', 'cxrResult',
+  'xpertCompleted', 'xpertResult',
+  'outcome', 'patientDx', 'tbRegistrationId', 'tbRegistrationDate',
+  'firstContactDate', 'firstFollowupDate', 'lastFollowupDate', 'remarks',
+];
+
 export async function updateReferralLogFollowUp(
   referralId: string,
-  followUp: {
-    contactAttempts: string;
-    clientContacted: string;
-    referralGivenByTelehealth: string;
-    arrivedAtCenter: string;
-    cxrCompleted: string;
-    cxrResult: string;
-    xpertCompleted: string;
-    xpertResult: string;
-  }
+  followUp: ReferralFollowUp
 ): Promise<boolean> {
-  const allData = await getSheetValues('Referral Log', 'A1:T1000');
+  const allData = await getSheetValues('Referral Log', 'A1:AB2000');
   const rowIndex = allData.findIndex(row => row[0] === referralId);
   if (rowIndex < 0) return false;
 
   const sheetRow = rowIndex + 1;
-  const values = [[
-    followUp.contactAttempts,
-    followUp.clientContacted,
-    followUp.referralGivenByTelehealth,
-    followUp.arrivedAtCenter,
-    followUp.cxrCompleted,
-    followUp.cxrResult,
-    followUp.xpertCompleted,
-    followUp.xpertResult,
-  ]];
-  await updateSheetCells('Referral Log', `L${sheetRow}:S${sheetRow}`, values);
+  const existingRow = allData[rowIndex] || [];
+
+  // Build values for columns M..AB (16 cells, 1-indexed columns 13..28).
+  // The previous code wrote to L:S which clobbered the screeningId column —
+  // L is column 12 = screeningId. This is now corrected.
+  const values = [EDITABLE_FOLLOWUP_KEYS.map(key => {
+    const headerIdx = REFERRAL_LOG_HEADERS.indexOf(key);
+    const next = followUp[key];
+    if (next !== undefined) return next;
+    return existingRow[headerIdx] || '';
+  })];
+  await updateSheetCells('Referral Log', `M${sheetRow}:AB${sheetRow}`, values);
   return true;
 }
 
 export async function getAllReferralLogs(): Promise<string[][]> {
   try {
-    return await getSheetValues('Referral Log', 'A1:T1000');
+    return await getSheetValues('Referral Log', 'A1:AB2000');
   } catch {
     return [];
   }

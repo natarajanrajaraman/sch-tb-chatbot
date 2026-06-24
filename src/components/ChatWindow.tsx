@@ -44,8 +44,38 @@ export default function ChatWindow({
 }: ChatWindowProps) {
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const savedKeysRef = useRef<Set<string>>(new Set());
+
+  // Persist sessions whenever they enter a terminal state. Older code paths
+  // only fired the save inside specific branches of handleSendMessage, which
+  // left self-referral (special-cased early-return) and exit (sets status to
+  // 'abandoned') silently un-saved. This effect catches all of them.
+  useEffect(() => {
+    if (session.status !== 'completed' && session.status !== 'abandoned') return;
+    const key = `${session.conversationId}:${session.status}`;
+    if (savedKeysRef.current.has(key)) return;
+    savedKeysRef.current.add(key);
+
+    fetch('/api/session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(session),
+    })
+      .then(r => r.json())
+      .then(r => {
+        if (!r?.success) {
+          savedKeysRef.current.delete(key);
+          setSaveError(r?.error ? `Session save failed: ${String(r.error).slice(0, 80)}` : 'Session save failed.');
+        }
+      })
+      .catch(e => {
+        savedKeysRef.current.delete(key);
+        setSaveError(`Network error saving session: ${String(e).slice(0, 80)}`);
+      });
+  }, [session]);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -127,9 +157,10 @@ export default function ChatWindow({
           const noMatch = t('msg.self_referral_no_match', BOT_MESSAGES.self_referral_no_match);
           const letter = generateReferralLetter(result.updatedSession, '', result.updatedSession.referralTownship || '');
           const header = t('msg.referral_letter_header', BOT_MESSAGES.referral_letter_header);
+          const chans = t('msg.followup_channels', BOT_MESSAGES.followup_channels);
           resultText = {
-            mm: noMatch.mm + '\n' + header.mm + '\n\n' + letter.mm,
-            en: noMatch.en + '\n' + header.en + '\n\n' + letter.en,
+            mm: noMatch.mm + '\n' + header.mm + '\n\n' + letter.mm + '\n\n' + chans.mm,
+            en: noMatch.en + '\n' + header.en + '\n\n' + letter.en + '\n\n' + chans.en,
           };
         } else {
           type Site = { site_id: string; facility_name: string; facility_name_mm?: string; address: string; phone: string; services: string; operating_hours: string };
@@ -143,10 +174,11 @@ export default function ChatWindow({
           const letter = generateReferralLetter(result.updatedSession, sites[0].facility_name, result.updatedSession.referralTownship || '');
           const siteHeader = t('msg.self_referral_result_header', BOT_MESSAGES.self_referral_result_header);
           const letterHeader = t('msg.referral_letter_header', BOT_MESSAGES.referral_letter_header);
+          const chans = t('msg.followup_channels', BOT_MESSAGES.followup_channels);
 
           resultText = {
-            mm: siteHeader.mm + siteListMm + '\n' + letterHeader.mm + '\n\n' + letter.mm,
-            en: siteHeader.en + siteListEn + '\n' + letterHeader.en + '\n\n' + letter.en,
+            mm: siteHeader.mm + siteListMm + '\n' + letterHeader.mm + '\n\n' + letter.mm + '\n\n' + chans.mm,
+            en: siteHeader.en + siteListEn + '\n' + letterHeader.en + '\n\n' + letter.en + '\n\n' + chans.en,
           };
 
           result.updatedSession.referralSitesShown = (sites as Site[]).map(s => s.site_id);
@@ -193,19 +225,7 @@ export default function ChatWindow({
     }
 
     addBotMessageWithDelay(result.botMessage);
-
-    // Save session to backend
-    if (result.updatedSession.status === 'completed') {
-      try {
-        await fetch('/api/session', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(result.updatedSession),
-        });
-      } catch {
-        // Silently fail for prototype
-      }
-    }
+    // Save fires automatically via the useEffect on session.status.
   }, [conversationState, session, addBotMessageWithDelay, setMessages, setSession, setConversationState]);
 
   const handleScreeningAction = useCallback((actionId: string, labelMm: string, labelEn: string) => {
@@ -290,7 +310,7 @@ export default function ChatWindow({
   };
 
   const isTextInputState = [
-    'ASK_AGE', 'ASK_NAME',
+    'ASK_NAME',
     'ASSISTED_ASK_PHONE',
     'SELF_ASK_TOWNSHIP_FREEFORM', 'SELF_ASK_CONTACT',
     'OTHER_QUESTIONS',
@@ -320,6 +340,14 @@ export default function ChatWindow({
         </div>
         <span className="text-lg">{theme.headerIcon}</span>
       </div>
+
+      {/* Save-error banner (prototype only — surfaces failed /api/session writes) */}
+      {saveError && (
+        <div className="bg-red-600/90 text-white text-[11px] px-3 py-1.5 flex items-center justify-between gap-2 shrink-0">
+          <span className="truncate" title={saveError}>⚠ {saveError}</span>
+          <button onClick={() => setSaveError(null)} className="opacity-80 hover:opacity-100 text-base leading-none">×</button>
+        </div>
+      )}
 
       {/* Messages Area */}
       <div

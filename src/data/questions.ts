@@ -231,6 +231,11 @@ export const RESPONSE_OPTIONS = {
     choice_1: { en: '1', mm: '၁' },
     choice_2: { en: '2', mm: '၂' },
   },
+  age_group: {
+    under_5: { en: 'Under 5 years', mm: '၅ နှစ်အောက်' },
+    pediatric: { en: '5 to 14 years', mm: '၅ မှ ၁၄ နှစ်' },
+    adult: { en: '15 years or above', mm: '၁၅ နှစ်နှင့်အထက်' },
+  },
   screening_action: {
     explain: { en: '❓ What does this mean?', mm: '❓ ဤမေးခွန်းကို ရှင်းပြပါ' },
     back: { en: '⬅️ Go back', mm: '⬅️ အရင်မေးခွန်းသို့' },

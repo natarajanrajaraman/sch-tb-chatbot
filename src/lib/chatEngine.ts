@@ -8,12 +8,13 @@ import { BOT_MESSAGES } from '@/data/messages';
 import { t } from './textRegistry';
 import { getStates, getDistricts, getTownships } from './locationRegistry';
 
-export const BOT_VERSION = '0.6.0';
+export const BOT_VERSION = '0.7.0';
 
 export type ConversationState =
   | 'LANDING'
   | 'P3_STUB'
   | 'ASK_AGE'
+  | 'AGE_UNDER_5'
   | 'SYMPTOM_INTRO'
   | `SYMPTOM_${number}`
   | 'RISK_FACTOR_INTRO'
@@ -56,6 +57,8 @@ export interface MessageOption {
   labelEn: string;
 }
 
+export type AgeGroup = 'under_5' | 'pediatric' | 'adult';
+
 export interface SessionData {
   conversationId: string;
   startedAt: string;
@@ -63,7 +66,8 @@ export interface SessionData {
   platformView: string;
   landingChoice?: '1' | '2';
   clientName?: string;
-  clientAge?: number;
+  clientAge?: number;          // legacy — no longer populated, kept for schema compat
+  ageGroup?: AgeGroup;          // new in v0.7
   clientGender?: string;
   symptoms: Record<string, boolean>;
   riskFactors: Record<string, boolean>;
@@ -76,7 +80,7 @@ export interface SessionData {
   clientPhone?: string;
   referralSitesShown?: string[];
   status: 'in_progress' | 'completed' | 'abandoned';
-  under15Excluded: boolean;
+  under15Excluded: boolean;     // legacy semantics: "was the user excluded for age". v0.7 = excluded when under_5.
   screeningId?: string;
   botVersion: string;
 }
@@ -158,7 +162,9 @@ export interface ActionConfig {
 // states are handled by getActionConfigForState() below because they're
 // parametric.
 const ACTION_CONFIGS: Partial<Record<ConversationState, ActionConfig>> = {
-  ASK_AGE:                    { explain: false, back: false, exit: true  },
+  // ASK_AGE: no exit button — it now uses 3 age-bucket buttons; users can
+  // simply pick "Under 5" to end the screening or use the debug-panel
+  // Restart Conversation button.
   ASK_NAME:                   { explain: false, back: true,  exit: true  },
   ASK_GENDER:                 { explain: false, back: true,  exit: true  },
   REFERRAL_CHOICE:            { explain: true,  back: true,  exit: true  },
@@ -254,6 +260,8 @@ export function rebuildCurrentMessage(state: ConversationState, session: Session
         'ASSISTED_CONSENT'
       );
     }
+    case 'ASK_AGE':
+      return buildAgeBucketMessage();
     case 'SELF_ASK_STATE':
       return withScreeningActions(buildStateChoiceMessage(), 'SELF_ASK_STATE');
     case 'SELF_ASK_DISTRICT':
@@ -406,7 +414,17 @@ export function goBack(state: ConversationState, session: SessionData): BackResu
 
   switch (state) {
     case 'ASK_NAME': {
-      // Back to RF10 (clears RF10 answer)
+      if (updated.ageGroup === 'pediatric') {
+        // Pediatric — skipped the RF pass, so back goes to S8
+        const s8 = SYMPTOM_QUESTIONS[7];
+        delete updated.symptoms[s8.id];
+        return {
+          prevState: 'SYMPTOM_8',
+          prevMessage: buildScreeningQuestionMessage(s8),
+          updatedSession: updated,
+        };
+      }
+      // Adult — back to RF10 (clears RF10 answer)
       const rf10 = RISK_FACTOR_QUESTIONS[9];
       delete updated.riskFactors[rf10.id];
       return {
@@ -512,6 +530,26 @@ export function goBack(state: ConversationState, session: SessionData): BackResu
     default:
       return { atFirst: true };
   }
+}
+
+export function buildAgeBucketMessage(): Message {
+  const body = t('msg.ask_age', BOT_MESSAGES.ask_age);
+  const u5 = t('opt.age_group.under_5', RESPONSE_OPTIONS.age_group.under_5);
+  const ped = t('opt.age_group.pediatric', RESPONSE_OPTIONS.age_group.pediatric);
+  const adult = t('opt.age_group.adult', RESPONSE_OPTIONS.age_group.adult);
+  return {
+    id: generateId(),
+    sender: 'bot',
+    textMm: body.mm,
+    textEn: body.en,
+    timestamp: Date.now(),
+    options: [
+      { id: 'age_under_5', labelMm: u5.mm, labelEn: u5.en },
+      { id: 'age_pediatric', labelMm: ped.mm, labelEn: ped.en },
+      { id: 'age_adult', labelMm: adult.mm, labelEn: adult.en },
+    ],
+    optionType: 'single',
+  };
 }
 
 export function getLandingMessage(): Message {
@@ -638,16 +676,21 @@ function processUserInputInner(
         updatedSession.landingChoice = '1';
         return {
           nextState: 'ASK_AGE',
-          botMessage: createBotMessage(t('msg.ask_age', BOT_MESSAGES.ask_age)),
+          botMessage: buildAgeBucketMessage(),
           updatedSession,
         };
       }
       if (input === 'landing_2') {
         updatedSession.landingChoice = '2';
         updatedSession.status = 'completed';
+        const stub = t('msg.p3_stub', BOT_MESSAGES.p3_stub);
+        const chans = t('msg.followup_channels', BOT_MESSAGES.followup_channels);
         return {
           nextState: 'P3_STUB',
-          botMessage: createBotMessage(t('msg.p3_stub', BOT_MESSAGES.p3_stub), getEndOptions()),
+          botMessage: createBotMessage({
+            mm: stub.mm + '\n\n' + chans.mm,
+            en: stub.en + '\n\n' + chans.en,
+          }, getEndOptions()),
           updatedSession,
         };
       }
@@ -655,27 +698,37 @@ function processUserInputInner(
     }
 
     case 'ASK_AGE': {
-      const age = parseInt(input, 10);
-      if (isNaN(age) || age < 0 || age > 150) {
-        return {
-          nextState: 'ASK_AGE',
-          botMessage: createBotMessage(t('msg.age_invalid', BOT_MESSAGES.age_invalid)),
-          updatedSession,
-        };
-      }
-      updatedSession.clientAge = age;
-      if (age < 15) {
+      // v0.7 — age groups instead of free-text age (matches old SCH FB bot).
+      if (input === 'age_under_5') {
+        updatedSession.ageGroup = 'under_5';
         updatedSession.under15Excluded = true;
         updatedSession.status = 'completed';
         return {
-          nextState: 'AGE_UNDER_15',
-          botMessage: createBotMessage(t('msg.age_under_15', BOT_MESSAGES.age_under_15), getEndOptions()),
+          nextState: 'AGE_UNDER_5',
+          botMessage: createBotMessage(t('msg.age_under_5', BOT_MESSAGES.age_under_5), getEndOptions()),
           updatedSession,
         };
       }
+      if (input === 'age_pediatric') {
+        updatedSession.ageGroup = 'pediatric';
+        return {
+          nextState: 'SYMPTOM_INTRO',
+          botMessage: createBotMessage(t('msg.symptom_intro_pediatric', BOT_MESSAGES.symptom_intro_pediatric)),
+          updatedSession,
+        };
+      }
+      if (input === 'age_adult') {
+        updatedSession.ageGroup = 'adult';
+        return {
+          nextState: 'SYMPTOM_INTRO',
+          botMessage: createBotMessage(t('msg.symptom_intro', BOT_MESSAGES.symptom_intro)),
+          updatedSession,
+        };
+      }
+      // Unknown — re-ask
       return {
-        nextState: 'SYMPTOM_INTRO',
-        botMessage: createBotMessage(t('msg.symptom_intro', BOT_MESSAGES.symptom_intro)),
+        nextState: 'ASK_AGE',
+        botMessage: buildAgeBucketMessage(),
         updatedSession,
       };
     }
@@ -708,7 +761,18 @@ function processUserInputInner(
           updatedSession,
         };
       }
-      // After last symptom → risk factor intro
+      // After last symptom — pediatric skips RF pass + goes straight to demographics
+      if (updatedSession.ageGroup === 'pediatric') {
+        const skip = t('msg.skip', BOT_MESSAGES.skip);
+        return {
+          nextState: 'ASK_NAME',
+          botMessage: createBotMessage(t('msg.ask_name', BOT_MESSAGES.ask_name), [
+            { id: 'skip', labelMm: skip.mm, labelEn: skip.en },
+          ]),
+          updatedSession,
+        };
+      }
+      // Adult — risk factor intro
       return {
         nextState: 'RISK_FACTOR_INTRO',
         botMessage: createBotMessage(t('msg.risk_factor_intro', BOT_MESSAGES.risk_factor_intro)),
@@ -826,11 +890,12 @@ function processUserInputInner(
       const scrId = updatedSession.screeningId || '';
       const idMsg = t('msg.screening_id_instruction', BOT_MESSAGES.screening_id_instruction);
       const result = t('msg.assisted_referral_result', BOT_MESSAGES.assisted_referral_result);
+      const chans = t('msg.followup_channels', BOT_MESSAGES.followup_channels);
       return {
         nextState: 'ASSISTED_RESULT',
         botMessage: createBotMessage({
-          mm: result.mm + idMsg.mm.replace('{SCREENING_ID}', scrId),
-          en: result.en + idMsg.en.replace('{SCREENING_ID}', scrId),
+          mm: result.mm + idMsg.mm.replace('{SCREENING_ID}', scrId) + '\n\n' + chans.mm,
+          en: result.en + idMsg.en.replace('{SCREENING_ID}', scrId) + '\n\n' + chans.en,
         }, getEndOptions()),
         updatedSession,
       };
@@ -900,6 +965,7 @@ function processUserInputInner(
     }
 
     case 'AGE_UNDER_15':
+    case 'AGE_UNDER_5':
     case 'DECLINE':
     case 'EXITED':
     case 'P3_STUB':
@@ -945,15 +1011,21 @@ function processUserInputInner(
   }
 }
 
-// Computes the 3-bucket classification per Q6.
+// Computes the classification.
+// - Adults (15+): Q6's 3-bucket logic — any symptom Yes = Presumptive; else
+//   any RF Yes = Negative (High Risk); else Not Presumptive.
+// - Pediatric (5-14): old-SCH-bot rule — 2+ symptom Yes = Presumptive,
+//   else Not Presumptive. Risk-factor pass is skipped for pediatric.
 function classify(
   session: SessionData
 ): { nextState: ConversationState; botMessage: Message; updatedSession: SessionData } {
   const updatedSession = { ...session };
-  const hasAnySymptom = Object.values(updatedSession.symptoms).some(v => v === true);
+  const symptomYesCount = Object.values(updatedSession.symptoms).filter(v => v === true).length;
   const hasAnyRiskFactor = Object.values(updatedSession.riskFactors).some(v => v === true);
 
-  if (hasAnySymptom) {
+  if (updatedSession.ageGroup === 'pediatric') {
+    updatedSession.classification = symptomYesCount >= 2 ? 'Presumptive TB' : 'Not Presumptive TB';
+  } else if (symptomYesCount >= 1) {
     updatedSession.classification = 'Presumptive TB';
   } else if (hasAnyRiskFactor) {
     updatedSession.classification = 'Negative (High Risk)';
@@ -979,10 +1051,11 @@ function classify(
   // Neg: health education + end
   const notPres = t('msg.result_not_presumptive', BOT_MESSAGES.result_not_presumptive);
   const hEd = t('msg.health_education', BOT_MESSAGES.health_education);
+  const chans = t('msg.followup_channels', BOT_MESSAGES.followup_channels);
   return {
     nextState: 'HEALTH_EDUCATION',
     botMessage: createBotMessage(
-      { mm: notPres.mm + '\n\n' + hEd.mm, en: notPres.en + '\n\n' + hEd.en },
+      { mm: notPres.mm + '\n\n' + hEd.mm + '\n\n' + chans.mm, en: notPres.en + '\n\n' + hEd.en + '\n\n' + chans.en },
       getEndOptions()
     ),
     updatedSession: { ...updatedSession, referralType: 'None', status: 'completed' },
@@ -1074,7 +1147,7 @@ To: Township TB Medical Officer / THD / TB Centre / Sun Clinic
 
 1. CLIENT INFORMATION
    Name: ${session.clientName || 'Not provided'}
-   Age: ${session.clientAge || 'Not provided'}
+   Age group: ${session.ageGroup === 'pediatric' ? 'Pediatric (5-14)' : session.ageGroup === 'adult' ? 'Adult (15+)' : session.ageGroup === 'under_5' ? 'Under 5' : (session.clientAge || 'Not provided')}
    Sex: ${session.clientGender === 'M' ? 'Male' : session.clientGender === 'F' ? 'Female' : 'Not provided'}
    Phone: ${session.clientPhone || 'Not provided'}
 
@@ -1108,7 +1181,7 @@ ${stateLineMm}${districtLineMm}မြို့နယ်: ${township}
 
 ၁။ လူနာ အချက်အလက်
    အမည်: ${session.clientName || 'မဖြည့်ပါ'}
-   အသက်: ${session.clientAge || 'မဖြည့်ပါ'}
+   အသက်အုပ်စု: ${session.ageGroup === 'pediatric' ? '၅-၁၄ နှစ်' : session.ageGroup === 'adult' ? '၁၅ နှစ်နှင့်အထက်' : session.ageGroup === 'under_5' ? '၅ နှစ်အောက်' : (session.clientAge || 'မဖြည့်ပါ')}
    ကျား/မ: ${session.clientGender === 'M' ? 'ကျား' : session.clientGender === 'F' ? 'မ' : 'မဖြည့်ပါ'}
    ဖုန်း: ${session.clientPhone || 'မဖြည့်ပါ'}
 

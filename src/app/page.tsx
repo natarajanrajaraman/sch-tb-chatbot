@@ -128,7 +128,7 @@ export default function Home() {
             </div>
 
             {/* Workflow flowchart — current conversation position */}
-            <WorkflowFlowchart state={conversationState} />
+            <WorkflowFlowchart state={conversationState} session={session} />
 
             {/* Restart Conversation — own row at top */}
             <div className="px-3 pt-2.5 pb-1 shrink-0">

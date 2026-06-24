@@ -28,9 +28,15 @@ export const BOT_MESSAGES = {
     en: 'Hello! Welcome to the TB Self-Screening System.\n\nThis screening will help check whether you may have symptoms of tuberculosis (TB). Would you like to start the screening?',
   },
   ask_age: {
-    mm: 'ကျေးဇူးပြု၍ သင့်အသက်ကို ရေးထည့်ပါ (နှစ်):',
-    en: 'Please enter your age (in years):',
+    mm: 'ကျေးဇူးပြု၍ သင်/သင့်ကလေး၏ အသက်အုပ်စုကို ရွေးပါ:',
+    en: 'Please select the age group of yourself / your child:',
   },
+  age_under_5: {
+    mm: 'အသက် ၅ နှစ်အောက် ကလေးငယ်များအတွက် ဤစစ်ဆေးမှု သင့်တော်မပါ။ ကျေးဇူးပြု၍ နီးစပ်ရာ ဆရာဝန် (သို့) ကျန်းမာရေးဝန်ထမ်းနှင့် တိုက်ရိုက်ဆက်သွယ်ပါ။',
+    en: 'This screening is not designed for children under 5 years old. Please consult a doctor or health worker directly.',
+  },
+  // Legacy key kept for back-compat in the language map. New flow uses
+  // age_under_5 above; under-15 are now screened via the pediatric path.
   age_under_15: {
     mm: 'ဤစစ်ဆေးမှုသည် အသက် ၁၅ နှစ်နှင့်အထက် လူကြီးများအတွက် ဖြစ်ပါသည်။ ကလေးများအတွက် ကျေးဇူးပြု၍ ကျန်းမာရေးဝန်ထမ်းတစ်ဦးနှင့် တိုက်ရိုက်ဆက်သွယ်ပါ။',
     en: 'This screening is designed for adults aged 15 and above. For children, please consult a healthcare provider directly.',
@@ -38,6 +44,17 @@ export const BOT_MESSAGES = {
   age_invalid: {
     mm: 'ကျေးဇူးပြု၍ မှန်ကန်သော အသက်ကို ဂဏန်းဖြင့် ရေးထည့်ပါ (ဥပမာ - ၂၅):',
     en: 'Please enter a valid age as a number (e.g., 25):',
+  },
+  symptom_intro_pediatric: {
+    mm: 'ကျေးဇူးတင်ပါသည်။ ယခု ကလေး၏ တီဘီရောဂါ လက္ခဏာများအကြောင်း မေးခွန်း (၈) ခု မေးပါမည်။ ကျေးဇူးပြု၍ "ဟုတ်ကဲ့" (သို့) "မဟုတ်ပါ" ဖြင့် ဖြေကြားပါ။',
+    en: 'Thank you. Now I will ask 8 questions about your child\'s TB symptoms. Please answer "Yes" or "No" for each question.',
+  },
+  // Follow-up channels placeholder (mirrors the old SCH FB bot's
+  // "for more questions message Thuta on Messenger" pattern, but with
+  // multi-channel options. Placeholders to be filled by SCH.)
+  followup_channels: {
+    mm: '📨 ပိုမိုသိရှိလိုသော မေးခွန်းများရှိပါက "နေ" Tele-Health အဖွဲ့ကို ဆက်သွယ်နိုင်ပါသည် —\nဖုန်း: 09-XXXXXXX\nViber: 09-XXXXXXX\nTelegram: @SCH-TB-XXXX\nFacebook: m.me/sch-tb-XXXX',
+    en: '📨 For more questions, you may contact the SCH Tele-Health team —\nPhone: 09-XXXXXXX\nViber: 09-XXXXXXX\nTelegram: @SCH-TB-XXXX\nFacebook: m.me/sch-tb-XXXX',
   },
   symptom_intro: {
     mm: 'ကျေးဇူးတင်ပါသည်။ ယခု တီဘီရောဂါ လက္ခဏာများအကြောင်း မေးခွန်း (၈) ခု မေးပါမည်။ ကျေးဇူးပြု၍ "ဟုတ်ကဲ့" (သို့) "မဟုတ်ပါ" ဖြင့် ဖြေကြားပါ။',

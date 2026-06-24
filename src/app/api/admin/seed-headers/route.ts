@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { seedHeaders, SESSIONS_HEADERS, CARE_REFERRAL_LOG_HEADERS } from '@/lib/googleSheets';
+import { seedHeaders, SESSIONS_HEADERS, CARE_REFERRAL_LOG_HEADERS, REFERRAL_LOG_HEADERS } from '@/lib/googleSheets';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -12,15 +12,7 @@ const SPEC = [
   },
   {
     sheetName: 'Referral Log',
-    headers: [
-      'referralId', 'conversationId', 'timestamp', 'clientName',
-      'clientAge', 'clientGender', 'referralType', 'township',
-      'facilityNames', 'referred', 'status', 'screeningId',
-      // Follow-up columns written by /admin (L-S in the existing code path)
-      'contactAttempts', 'clientContacted', 'referralGivenByTelehealth',
-      'arrivedAtCenter', 'cxrCompleted', 'cxrResult',
-      'xpertCompleted', 'xpertResult',
-    ],
+    headers: REFERRAL_LOG_HEADERS,
   },
   {
     sheetName: 'Language Map',

@@ -42,10 +42,10 @@ export default function DataTable({ data, title }: { data: string[][]; title: st
           Download CSV
         </button>
       </div>
-      <div className="bg-white rounded-lg shadow-sm overflow-x-auto">
+      <div className="bg-white rounded-lg shadow-sm overflow-x-auto overflow-y-auto" style={{ maxHeight: '70vh' }}>
         <table className="w-full text-xs">
-          <thead>
-            <tr className="bg-gray-50 border-b">
+          <thead className="sticky top-0 z-10 bg-gray-50 shadow-sm">
+            <tr className="border-b">
               {headers.map((h, i) => (
                 <th key={i} className="px-3 py-2.5 text-left font-semibold text-gray-600 whitespace-nowrap">
                   {h}

@@ -62,11 +62,24 @@ function AdminInner() {
       setCareReferralLogs(careData.data || []);
 
       // Calculate stats from session data — resolve column positions from
-      // the header row so we stay correct across schema changes.
+      // the header row so we stay correct across schema changes. Old v0.2/v0.3
+      // rows had a 27-column shape with classification/referralType/status
+      // at different positions; we detect those by row length and fall back to
+      // the legacy positions so the stats reflect ALL data, not just v0.4+ rows.
       const allRows = sessData.data || [];
       const headers: string[] = allRows[0] || [];
       const rows: string[][] = allRows.slice(1);
       const col = (name: string) => headers.findIndex(h => h === name);
+
+      // Legacy v0.2/v0.3 column positions (27-col schema)
+      const LEGACY_COLS = {
+        classification: 17,
+        referralType: 18,
+        referralTownship: 19,
+        status: 23,
+        under15Excluded: 24,
+      };
+
       const cClassification = col('classification');
       const cReferralType = col('referralType');
       const cStatus = col('status');
@@ -74,23 +87,37 @@ function AdminInner() {
       const cTownship = col('referralTownship');
       const cFacility = col('referralSitesShown');
 
-      const completed = rows.filter(r => r[cStatus] === 'completed');
-      const presumptive = rows.filter(r => r[cClassification] === 'Presumptive TB');
-      const negHighRisk = rows.filter(r => r[cClassification] === 'Negative (High Risk)');
-      const notPresumptive = rows.filter(r => r[cClassification] === 'Not Presumptive TB');
-      const assisted = rows.filter(r => r[cReferralType] === 'Assisted');
-      const self = rows.filter(r => r[cReferralType] === 'Self');
-      const excluded = rows.filter(r => r[cUnder15] === 'Yes');
+      function readCol(row: string[], modernIdx: number, legacyIdx: number): string {
+        // If the row has the modern column populated, use it. Otherwise check
+        // the legacy position. Row length is the discriminator.
+        if (modernIdx >= 0 && row[modernIdx] !== undefined && row[modernIdx] !== '') {
+          return row[modernIdx];
+        }
+        // Older v0.2/v0.3 rows have 27-ish columns total; if this row's last
+        // populated cell is below the modern header range, use the legacy slot.
+        if (row.length <= 27 && row[legacyIdx] !== undefined) {
+          return row[legacyIdx];
+        }
+        return row[modernIdx] || '';
+      }
+
+      const completed = rows.filter(r => readCol(r, cStatus, LEGACY_COLS.status) === 'completed');
+      const presumptive = rows.filter(r => readCol(r, cClassification, LEGACY_COLS.classification) === 'Presumptive TB');
+      const negHighRisk = rows.filter(r => readCol(r, cClassification, LEGACY_COLS.classification) === 'Negative (High Risk)');
+      const notPresumptive = rows.filter(r => readCol(r, cClassification, LEGACY_COLS.classification) === 'Not Presumptive TB');
+      const assisted = rows.filter(r => readCol(r, cReferralType, LEGACY_COLS.referralType) === 'Assisted');
+      const self = rows.filter(r => readCol(r, cReferralType, LEGACY_COLS.referralType) === 'Self');
+      const excluded = rows.filter(r => readCol(r, cUnder15, LEGACY_COLS.under15Excluded) === 'Yes');
 
       // By-provider/township summary — count referrals grouped by destination
       const providerCounts: Record<string, number> = {};
       for (const r of rows) {
-        const facility = (r[cFacility] || '').trim();
-        const township = (r[cTownship] || '').trim();
+        const refType = readCol(r, cReferralType, LEGACY_COLS.referralType);
+        if (refType !== 'Assisted' && refType !== 'Self') continue;
+        const facility = (cFacility >= 0 ? (r[cFacility] || '') : '').trim();
+        const township = readCol(r, cTownship, LEGACY_COLS.referralTownship).trim();
         const key = facility ? `${facility}${township ? ` · ${township}` : ''}` : township || '(unknown)';
-        if (r[cReferralType] === 'Assisted' || r[cReferralType] === 'Self') {
-          providerCounts[key] = (providerCounts[key] || 0) + 1;
-        }
+        providerCounts[key] = (providerCounts[key] || 0) + 1;
       }
       const byProvider = Object.entries(providerCounts)
         .map(([label, count]) => ({ label, count }))
@@ -347,10 +374,10 @@ function ReferralLogTable({ data, onRefresh }: { data: string[][]; onRefresh: ()
         </button>
       </div>
       <div className="text-xs text-gray-500 mb-2">Click a row to expand and edit follow-up tracking fields</div>
-      <div className="bg-white rounded-lg shadow-sm overflow-x-auto">
+      <div className="bg-white rounded-lg shadow-sm overflow-x-auto overflow-y-auto" style={{ maxHeight: '70vh' }}>
         <table className="w-full text-xs">
-          <thead>
-            <tr className="bg-gray-50 border-b">
+          <thead className="sticky top-0 z-10 bg-gray-50 shadow-sm">
+            <tr className="border-b">
               {headers.map((h, i) => (
                 <th key={i} className="px-3 py-2.5 text-left font-semibold text-gray-600 whitespace-nowrap">{h}</th>
               ))}
@@ -460,10 +487,10 @@ function DataTable({ data, title }: { data: string[][]; title: string }) {
           Download CSV
         </button>
       </div>
-      <div className="bg-white rounded-lg shadow-sm overflow-x-auto">
+      <div className="bg-white rounded-lg shadow-sm overflow-x-auto overflow-y-auto" style={{ maxHeight: '70vh' }}>
         <table className="w-full text-xs">
-          <thead>
-            <tr className="bg-gray-50 border-b">
+          <thead className="sticky top-0 z-10 bg-gray-50 shadow-sm">
+            <tr className="border-b">
               {headers.map((h, i) => (
                 <th key={i} className="px-3 py-2.5 text-left font-semibold text-gray-600 whitespace-nowrap">
                   {h}

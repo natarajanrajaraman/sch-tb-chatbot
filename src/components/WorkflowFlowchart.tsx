@@ -1,6 +1,6 @@
 'use client';
 
-import { ConversationState } from '@/lib/chatEngine';
+import { ConversationState, SessionData } from '@/lib/chatEngine';
 
 interface Stage {
   id: string;
@@ -105,16 +105,32 @@ const STAGES: Stage[] = [
   },
 ];
 
-export default function WorkflowFlowchart({ state }: { state: ConversationState }) {
-  const currentIdx = STAGES.findIndex(s => s.matches(state));
+export default function WorkflowFlowchart({ state, session }: { state: ConversationState; session?: SessionData }) {
+  // Pediatric path skips the RF stage — hide it from the flowchart so the
+  // user's actual journey is shown.
+  const visibleStages = session?.ageGroup === 'pediatric'
+    ? STAGES.filter(s => s.id !== 'risk_factors')
+    : STAGES;
+  const currentIdx = visibleStages.findIndex(s => s.matches(state));
+
+  const ageLabel = session?.ageGroup === 'pediatric'
+    ? 'Pediatric pass (5-14, 2+ Yes)'
+    : session?.ageGroup === 'adult'
+      ? 'Adult pass (15+, 8 sym + 10 RF)'
+      : session?.ageGroup === 'under_5'
+        ? 'Excluded (under 5)'
+        : null;
 
   return (
     <div className="px-3 py-2 border-b border-gray-700/30 bg-gray-900/40 shrink-0">
-      <div className="text-[9px] font-medium text-gray-500 uppercase tracking-wider mb-1.5">
-        Workflow position
+      <div className="flex items-baseline justify-between mb-1.5">
+        <div className="text-[9px] font-medium text-gray-500 uppercase tracking-wider">
+          Workflow position
+        </div>
+        {ageLabel && <div className="text-[9px] text-amber-400/80">{ageLabel}</div>}
       </div>
       <div className="space-y-0.5">
-        {STAGES.map((s, i) => {
+        {visibleStages.map((s, i) => {
           const isCurrent = i === currentIdx;
           const isPast = currentIdx >= 0 && i < currentIdx;
           const sub = isCurrent && s.sublabel ? s.sublabel(state) : null;

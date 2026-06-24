@@ -69,6 +69,32 @@ pathway**, and one thing we should probably borrow: **the explicit
 | **Data fields captured** | 32 fields including: TB Registration ID, final Dx (TB / Non-TB), 1st / last follow-up dates, contact-attempt counter, Reached site (Sun GP TB S3 / Other facility), Reached date. | Sessions sheet captures screening + referral routing + consent + landing choice + classification + screening ID. **Final diagnosis / TB Registration ID are not captured.** Follow-up CXR/GeneXpert exists on the Referral Log. |
 | **Knowledge base** | None (no Q&A). | None on P1 yet. P3 (stubbed) is intended to be RAG over WHO Module 4 + Myanmar NTP + CDC Q&A. |
 
+## Status: implemented in v0.7.0
+
+The first three recommendations below were merged into the prototype in
+v0.7.0. The fourth and fifth remain open. The "items to keep our breadth"
+list and the symptom-phrasing alignment are unchanged.
+
+- ✅ **Pediatric pathway (5–14)** — same 8 questions, 2+ Yes threshold,
+  no RF pass. Under 5 exits with a "consult HCP" notice. See
+  `docs/KZ-DISCUSSION-POINTS.md` §1 for the SCH sign-off ask.
+- ✅ **Age-bucket selector** — replaces free-text age with 3 buttons
+  (Under 5 / 5–14 / 15+), matching the old bot.
+- ✅ **Outcome enum + final-diagnosis fields** on the Screening Referral
+  Log: `outcome` (Pending / Referred / Reached / Lost), `patientDx`
+  (TB / Non-TB), `tbRegistrationId`, `tbRegistrationDate`,
+  `firstContactDate`, `firstFollowupDate`, `lastFollowupDate`,
+  `remarks` — all editable in the SCH Telehealth dashboard.
+- ✅ **2-week / 2-attempt follow-up SLA** is now visualised in the SCH
+  Telehealth dashboard: rows are colour-coded by days-since-first-
+  contact (within window → 1st FU due at 2d → last FU due at 12d →
+  past 2-week SLA at 14d → resolved / lost). Summary counts shown at
+  the top of the table.
+- ✅ **Multi-channel follow-up surface** — at every completion endpoint
+  the bot now shows a "for more questions, contact SCH Tele-Health"
+  block with Phone / Viber / Telegram / Facebook placeholders, mirroring
+  the old bot's m.me/thukhathuta2022 pattern.
+
 ## Recommendations — items worth pulling INTO our prototype
 
 These are the gaps where the old bot has something we don't, and where
@@ -126,20 +152,13 @@ Confirmed. Old bot has three age groups: <5, 5–14, ≥15. Ours asks
 free-text and excludes anyone <15. This is the single most
 visible "shape" difference between the two flows.
 
-## One open question for SCH
+## Open questions for SCH
 
-The old bot's design says the bot is "powered by Thuta — သုခသုတ
-Facebook Messenger" and points users to `m.me/thukhathuta2022` for
-follow-up. The branding pattern is "Thuta = chatbot brand,
-m.me/thukhathuta2022 = follow-up surface". For the new SCH TB
-Chatbot:
+Tracked in `docs/KZ-DISCUSSION-POINTS.md` — single live list. As of
+v0.7.0, two items there:
 
-- Does SCH want a similar "front-of-house brand" (e.g. "Sun Chatbot",
-  matching their "Sun" clinic brand) distinct from the org name?
-- Should the follow-up surface stay on the Sun Tele-Health phone, or
-  do they also want a Messenger / Viber inbox for users who prefer
-  to text?
-
-Worth raising with KZ at the next ETCxSCH weekly catch-up so
-production naming + handoff surface is settled before engineering
-builds it in.
+1. Pediatric pass — sign off on the 2+ Yes threshold and confirm
+   there's no separate pediatric RF set.
+2. Follow-up surface — confirm which of Phone / Viber / Telegram /
+   Facebook SCH wants to staff for chatbot follow-up questions, and
+   provide the real values to drop into the placeholder block.
