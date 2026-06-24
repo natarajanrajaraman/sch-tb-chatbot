@@ -9,9 +9,9 @@ import {
   processUserInput,
   generateReferralLetter,
   generateId,
-  getSymptomIndexForState,
-  getSymptomQuestionByIndex,
-  buildSymptomMessage,
+  getQuestionLocationForState,
+  getQuestionByLocation,
+  buildScreeningQuestionMessage,
   buildExplanationMessage,
   buildBackAtFirstMessage,
   buildExitMessage,
@@ -39,7 +39,6 @@ export default function ChatWindow({
   setConversationState,
 }: ChatWindowProps) {
   const [inputText, setInputText] = useState('');
-  const [selectedConditions, setSelectedConditions] = useState<string[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -74,25 +73,30 @@ export default function ChatWindow({
     setMessages((prev: Message[]) => [...prev, userMessage]);
 
     // Process through chat engine
-    const result = processUserInput(
-      conversationState,
-      inputValue,
-      session,
-      conversationState === 'ASK_CONDITIONS' ? selectedConditions : undefined
-    );
+    const result = processUserInput(conversationState, inputValue, session);
 
     setSession(result.updatedSession);
     setConversationState(result.nextState);
-    setSelectedConditions([]);
 
     // Handle special states
     if (result.nextState === 'SYMPTOM_INTRO') {
-      // Show intro then auto-advance to first question
+      // Show intro then auto-advance to first symptom question
       addBotMessageWithDelay(result.botMessage);
       setTimeout(() => {
         const firstQ = processUserInput('SYMPTOM_INTRO', '', result.updatedSession);
         addBotMessageWithDelay(firstQ.botMessage);
         setConversationState(firstQ.nextState);
+      }, 1500);
+      return;
+    }
+
+    if (result.nextState === 'RISK_FACTOR_INTRO') {
+      // Show intro then auto-advance to first risk factor question
+      addBotMessageWithDelay(result.botMessage);
+      setTimeout(() => {
+        const firstRf = processUserInput('RISK_FACTOR_INTRO', '', result.updatedSession);
+        addBotMessageWithDelay(firstRf.botMessage);
+        setConversationState(firstRf.nextState);
       }, 1500);
       return;
     }
@@ -114,28 +118,34 @@ export default function ChatWindow({
 
         let resultText: { mm: string; en: string };
         if (sites.length === 0) {
+          // Q12 — no Sun GP for this township; still issue the referral letter and
+          // point to the nearest township hospital or TB department.
+          const noMatch = t('msg.self_referral_no_match', BOT_MESSAGES.self_referral_no_match);
+          const letter = generateReferralLetter(result.updatedSession, '', result.updatedSession.referralTownship || '');
+          const header = t('msg.referral_letter_header', BOT_MESSAGES.referral_letter_header);
           resultText = {
-            mm: BOT_MESSAGES.self_referral_no_match.mm,
-            en: BOT_MESSAGES.self_referral_no_match.en,
+            mm: noMatch.mm + '\n' + header.mm + '\n\n' + letter.mm,
+            en: noMatch.en + '\n' + header.en + '\n\n' + letter.en,
           };
         } else {
-          const siteListMm = sites.map((s: { facility_name_mm: string; facility_name: string; address: string; phone: string; services: string; operating_hours: string }, i: number) =>
+          type Site = { site_id: string; facility_name: string; facility_name_mm?: string; address: string; phone: string; services: string; operating_hours: string };
+          const siteListMm = (sites as Site[]).map((s, i) =>
             `${i + 1}. ${s.facility_name_mm || s.facility_name}\n   📍 ${s.address}\n   📞 ${s.phone}\n   🏥 ${s.services}\n   🕐 ${s.operating_hours}`
           ).join('\n\n');
-          const siteListEn = sites.map((s: { facility_name: string; address: string; phone: string; services: string; operating_hours: string }, i: number) =>
+          const siteListEn = (sites as Site[]).map((s, i) =>
             `${i + 1}. ${s.facility_name}\n   📍 ${s.address}\n   📞 ${s.phone}\n   🏥 ${s.services}\n   🕐 ${s.operating_hours}`
           ).join('\n\n');
 
           const letter = generateReferralLetter(result.updatedSession, sites[0].facility_name, result.updatedSession.referralTownship || '');
-          const scrId = result.updatedSession.screeningId || '';
-          const idMsg = BOT_MESSAGES.screening_id_instruction;
+          const siteHeader = t('msg.self_referral_result_header', BOT_MESSAGES.self_referral_result_header);
+          const letterHeader = t('msg.referral_letter_header', BOT_MESSAGES.referral_letter_header);
 
           resultText = {
-            mm: BOT_MESSAGES.self_referral_result_header.mm + siteListMm + '\n' + BOT_MESSAGES.referral_letter_header.mm + '\n\n' + letter.mm + idMsg.mm.replace('{SCREENING_ID}', scrId),
-            en: BOT_MESSAGES.self_referral_result_header.en + siteListEn + '\n' + BOT_MESSAGES.referral_letter_header.en + '\n\n' + letter.en + idMsg.en.replace('{SCREENING_ID}', scrId),
+            mm: siteHeader.mm + siteListMm + '\n' + letterHeader.mm + '\n\n' + letter.mm,
+            en: siteHeader.en + siteListEn + '\n' + letterHeader.en + '\n\n' + letter.en,
           };
 
-          result.updatedSession.referralSitesShown = sites.map((s: { site_id: string }) => s.site_id);
+          result.updatedSession.referralSitesShown = (sites as Site[]).map(s => s.site_id);
           setSession(result.updatedSession);
         }
 
@@ -192,11 +202,11 @@ export default function ChatWindow({
         // Silently fail for prototype
       }
     }
-  }, [conversationState, session, selectedConditions, addBotMessageWithDelay, setMessages, setSession, setConversationState]);
+  }, [conversationState, session, addBotMessageWithDelay, setMessages, setSession, setConversationState]);
 
   const handleScreeningAction = useCallback((actionId: string, labelMm: string, labelEn: string) => {
-    const currentIndex = getSymptomIndexForState(conversationState);
-    if (currentIndex == null) return;
+    const loc = getQuestionLocationForState(conversationState);
+    if (loc == null) return;
 
     // Echo the user's tap as a user message
     const userMessage: Message = {
@@ -209,35 +219,56 @@ export default function ChatWindow({
     setMessages((prev: Message[]) => [...prev, userMessage]);
 
     if (actionId === 'act_explain') {
-      const q = getSymptomQuestionByIndex(currentIndex);
+      const q = getQuestionByLocation(loc);
       if (!q) return;
       addBotMessageWithDelay(buildExplanationMessage(q));
-      // Re-show the same question after the explanation
-      setTimeout(() => {
-        addBotMessageWithDelay(buildSymptomMessage(q));
-      }, 1400);
+      setTimeout(() => addBotMessageWithDelay(buildScreeningQuestionMessage(q)), 1400);
       return;
     }
 
     if (actionId === 'act_back') {
-      if (currentIndex <= 1) {
-        addBotMessageWithDelay(buildBackAtFirstMessage());
-        // Re-show the first question
-        const q = getSymptomQuestionByIndex(1);
-        if (q) setTimeout(() => addBotMessageWithDelay(buildSymptomMessage(q)), 1200);
+      // Symptom case
+      if (loc.category === 'symptom') {
+        if (loc.index <= 1) {
+          addBotMessageWithDelay(buildBackAtFirstMessage());
+          const q = getQuestionByLocation({ category: 'symptom', index: 1 });
+          if (q) setTimeout(() => addBotMessageWithDelay(buildScreeningQuestionMessage(q)), 1200);
+          return;
+        }
+        const prevQ = getQuestionByLocation({ category: 'symptom', index: loc.index - 1 });
+        if (!prevQ) return;
+        setSession((prev: SessionData) => {
+          const cleared = { ...prev, symptoms: { ...prev.symptoms } };
+          delete cleared.symptoms[prevQ.id];
+          return cleared;
+        });
+        setConversationState(`SYMPTOM_${loc.index - 1}` as ConversationState);
+        addBotMessageWithDelay(buildScreeningQuestionMessage(prevQ));
         return;
       }
-      const prevIndex = currentIndex - 1;
-      const prevQ = getSymptomQuestionByIndex(prevIndex);
+      // Risk-factor case
+      if (loc.index <= 1) {
+        // Cross-section: RF1 → back to S8 (re-ask the last symptom)
+        const prevQ = getQuestionByLocation({ category: 'symptom', index: 8 });
+        if (!prevQ) return;
+        setSession((prev: SessionData) => {
+          const cleared = { ...prev, symptoms: { ...prev.symptoms } };
+          delete cleared.symptoms[prevQ.id];
+          return cleared;
+        });
+        setConversationState('SYMPTOM_8' as ConversationState);
+        addBotMessageWithDelay(buildScreeningQuestionMessage(prevQ));
+        return;
+      }
+      const prevQ = getQuestionByLocation({ category: 'risk_factor', index: loc.index - 1 });
       if (!prevQ) return;
-      // Clear the previous answer so the user can re-answer it
       setSession((prev: SessionData) => {
-        const cleared = { ...prev, symptoms: { ...prev.symptoms } };
-        delete cleared.symptoms[prevQ.id];
+        const cleared = { ...prev, riskFactors: { ...prev.riskFactors } };
+        delete cleared.riskFactors[prevQ.id];
         return cleared;
       });
-      setConversationState(`SYMPTOM_${prevIndex}` as ConversationState);
-      addBotMessageWithDelay(buildSymptomMessage(prevQ));
+      setConversationState(`RISK_FACTOR_${loc.index - 1}` as ConversationState);
+      addBotMessageWithDelay(buildScreeningQuestionMessage(prevQ));
       return;
     }
 
@@ -259,33 +290,7 @@ export default function ChatWindow({
       handleScreeningAction(optionId, labelMm, labelEn);
       return;
     }
-
-    if (conversationState === 'ASK_CONDITIONS' && optionId !== 'none') {
-      // Multi-select for conditions
-      setSelectedConditions(prev =>
-        prev.includes(optionId)
-          ? prev.filter(c => c !== optionId)
-          : [...prev, optionId]
-      );
-      return;
-    }
-    if (conversationState === 'ASK_CONDITIONS' && optionId === 'none') {
-      setSelectedConditions([]);
-      handleSendMessage('none', labelMm, labelEn);
-      return;
-    }
     handleSendMessage(optionId, labelMm, labelEn);
-  };
-
-  const handleConfirmConditions = () => {
-    const labels = selectedConditions.map(c => {
-      if (c === 'dm') return { mm: 'ဆီးချိုရောဂါ', en: 'Diabetes' };
-      if (c === 'hiv') return { mm: 'အိတ်ခ်ျအိုင်ဗွီ', en: 'HIV' };
-      return { mm: c, en: c };
-    });
-    const displayMm = labels.length > 0 ? labels.map(l => l.mm).join(', ') : 'မရှိပါ';
-    const displayEn = labels.length > 0 ? labels.map(l => l.en).join(', ') : 'None';
-    handleSendMessage(selectedConditions.join(',') || 'none', displayMm, displayEn);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -295,7 +300,12 @@ export default function ChatWindow({
     setInputText('');
   };
 
-  const isTextInputState = ['ASK_AGE', 'ASK_NAME', 'ASSISTED_ASK_PHONE', 'SELF_ASK_TOWNSHIP', 'SELF_ASK_CONTACT', 'OTHER_QUESTIONS'].includes(conversationState);
+  const isTextInputState = [
+    'ASK_AGE', 'ASK_NAME',
+    'ASSISTED_ASK_PHONE',
+    'SELF_ASK_TOWNSHIP_FREEFORM', 'SELF_ASK_CONTACT',
+    'OTHER_QUESTIONS',
+  ].includes(conversationState);
   const lastMessage = messages[messages.length - 1];
   const hasActiveOptions = lastMessage?.sender === 'bot' && lastMessage?.options && lastMessage.options.length > 0;
 
@@ -395,18 +405,10 @@ export default function ChatWindow({
               <button
                 key={opt.id}
                 onClick={() => handleOptionClick(opt.id, opt.labelMm, opt.labelEn)}
-                className={`font-medium transition-all hover:opacity-80 active:scale-95 ${
-                  conversationState === 'ASK_CONDITIONS' && selectedConditions.includes(opt.id)
-                    ? 'ring-2 ring-offset-1'
-                    : ''
-                }`}
+                className="font-medium transition-all hover:opacity-80 active:scale-95"
                 style={{
-                  backgroundColor: conversationState === 'ASK_CONDITIONS' && selectedConditions.includes(opt.id)
-                    ? theme.buttonBorder
-                    : theme.buttonBg,
-                  color: conversationState === 'ASK_CONDITIONS' && selectedConditions.includes(opt.id)
-                    ? theme.buttonBg
-                    : theme.buttonText,
+                  backgroundColor: theme.buttonBg,
+                  color: theme.buttonText,
                   border: `1.5px solid ${theme.buttonBorder}`,
                   borderRadius: theme.buttonRadius,
                   padding: theme.messagePadding,
@@ -416,22 +418,6 @@ export default function ChatWindow({
                 {opt.labelMm}
               </button>
             ))}
-            {conversationState === 'ASK_CONDITIONS' && selectedConditions.length > 0 && (
-              <button
-                onClick={handleConfirmConditions}
-                className="font-bold transition-all hover:opacity-80 active:scale-95"
-                style={{
-                  backgroundColor: theme.buttonBorder,
-                  color: '#ffffff',
-                  borderRadius: theme.buttonRadius,
-                  border: 'none',
-                  padding: theme.messagePadding,
-                  fontSize: theme.fontSize,
-                }}
-              >
-                {t('msg.confirm', BOT_MESSAGES.confirm).mm}
-              </button>
-            )}
           </div>
         )}
 

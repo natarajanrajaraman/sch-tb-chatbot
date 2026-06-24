@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { seedLanguageMap } from '@/lib/googleSheets';
 import { BOT_MESSAGES } from '@/data/messages';
-import { SYMPTOM_QUESTIONS, RESPONSE_OPTIONS } from '@/data/questions';
+import { SYMPTOM_QUESTIONS, RISK_FACTOR_QUESTIONS, RESPONSE_OPTIONS } from '@/data/questions';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -22,19 +22,20 @@ function buildSeed(): { key: string; en: string; mm: string; notes?: string }[] 
     }
   }
 
-  // SYMPTOM_QUESTIONS — question.<id>.text and question.<id>.explanation
-  for (const q of SYMPTOM_QUESTIONS) {
+  // SYMPTOM + RISK_FACTOR questions — question.<id>.text and .explanation
+  for (const q of [...SYMPTOM_QUESTIONS, ...RISK_FACTOR_QUESTIONS]) {
+    const tag = q.category === 'symptom' ? `S${q.index}` : `RF${q.index}`;
     out.push({
       key: `question.${q.id}.text`,
       en: q.textEn,
       mm: q.textMm,
-      notes: `Q${q.index} — ${q.category}`,
+      notes: `${tag} — ${q.category}`,
     });
     out.push({
       key: `question.${q.id}.explanation`,
       en: q.explanationEn,
       mm: q.explanationMm,
-      notes: `Q${q.index} explanation (shown when user taps "What does this mean?")`,
+      notes: `${tag} explanation (shown when user taps "What does this mean?")`,
     });
   }
 

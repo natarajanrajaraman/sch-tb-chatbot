@@ -13,6 +13,8 @@ import {
   createInitialSession,
 } from '@/lib/chatEngine';
 import { setOverrides } from '@/lib/textRegistry';
+import { setLocations } from '@/lib/locationRegistry';
+import { LOCATION_SEED } from '@/data/locationSeed';
 
 const DEFAULT_PLATFORM: PlatformType = 'viber';
 
@@ -30,18 +32,27 @@ export default function Home() {
   useEffect(() => {
     let cancelled = false;
     setMounted(true);
-    // Load the latest language map, then show the landing message
+    // Seed locations from bundled defaults so the cascade works even if the
+    // sheet hasn't been populated yet — the live fetch overrides this below.
+    setLocations(LOCATION_SEED);
     (async () => {
       try {
-        const res = await fetch('/api/language-map', { cache: 'no-store' });
-        if (res.ok) {
-          const data = await res.json();
-          if (!cancelled && data?.map) {
-            setOverrides(data.map);
+        const [mapRes, locRes] = await Promise.all([
+          fetch('/api/language-map', { cache: 'no-store' }),
+          fetch('/api/locations', { cache: 'no-store' }),
+        ]);
+        if (mapRes.ok) {
+          const data = await mapRes.json();
+          if (!cancelled && data?.map) setOverrides(data.map);
+        }
+        if (locRes.ok) {
+          const data = await locRes.json();
+          if (!cancelled && Array.isArray(data?.rows) && data.rows.length > 0) {
+            setLocations(data.rows);
           }
         }
       } catch {
-        // Fall back to default strings
+        // Fall back to bundled defaults
       } finally {
         if (!cancelled) {
           setMessages([getWelcomeMessage()]);

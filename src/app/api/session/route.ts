@@ -10,18 +10,26 @@ export async function POST(request: NextRequest) {
       startedAt: body.startedAt,
       completedAt: body.completedAt || new Date().toISOString(),
       platformView: body.platformView,
+      landingChoice: body.landingChoice || '',
       clientName: body.clientName || '',
       clientAge: body.clientAge?.toString() || '',
       clientGender: body.clientGender || '',
-      conditionDm: body.conditionDm ? 'Yes' : 'No',
-      conditionHiv: body.conditionHiv ? 'Yes' : 'No',
       symptoms: body.symptoms || {},
+      riskFactors: body.riskFactors || {},
       classification: body.classification || '',
       referralType: body.referralType || 'None',
+      consentToPhoneContact: body.consentToPhoneContact === true
+        ? 'Yes'
+        : body.consentToPhoneContact === false
+          ? 'No'
+          : '',
+      referralStateRegion: body.referralStateRegion || '',
+      referralDistrict: body.referralDistrict || '',
       referralTownship: body.referralTownship || '',
       clientPhone: body.clientPhone || '',
-      clientAddress: body.clientAddress || '',
-      referralSitesShown: body.referralSitesShown?.join(', ') || '',
+      referralSitesShown: Array.isArray(body.referralSitesShown)
+        ? body.referralSitesShown.join(', ')
+        : (body.referralSitesShown || ''),
       status: body.status || 'completed',
       under15Excluded: body.under15Excluded ? 'Yes' : 'No',
       screeningId: body.screeningId || '',
@@ -38,7 +46,9 @@ export async function POST(request: NextRequest) {
         body.clientGender || '',
         body.referralType,
         body.referralTownship || '',
-        body.referralSitesShown?.join(', ') || '',
+        Array.isArray(body.referralSitesShown)
+          ? body.referralSitesShown.join(', ')
+          : (body.referralSitesShown || ''),
         'Referred',
         body.screeningId || ''
       );
