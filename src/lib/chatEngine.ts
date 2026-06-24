@@ -1,10 +1,12 @@
-import { SYMPTOM_QUESTIONS, RESPONSE_OPTIONS } from '@/data/questions';
+import { SYMPTOM_QUESTIONS, RESPONSE_OPTIONS, ScreeningQuestion } from '@/data/questions';
 import { BOT_MESSAGES } from '@/data/messages';
+import { t } from './textRegistry';
 
-export const BOT_VERSION = '0.2.0';
+export const BOT_VERSION = '0.3.0';
 
 export type ConversationState =
-  | 'WELCOME'
+  | 'LANDING'
+  | 'P3_STUB'
   | 'ASK_AGE'
   | 'SYMPTOM_INTRO'
   | `SYMPTOM_${number}`
@@ -23,6 +25,7 @@ export type ConversationState =
   | 'OTHER_QUESTIONS'
   | 'GOODBYE'
   | 'AGE_UNDER_15'
+  | 'EXITED'
   | 'DECLINE';
 
 export interface Message {
@@ -46,6 +49,7 @@ export interface SessionData {
   startedAt: string;
   completedAt?: string;
   platformView: string;
+  landingChoice?: '1' | '2';
   clientName?: string;
   clientAge?: number;
   clientGender?: string;
@@ -93,20 +97,108 @@ export function createInitialSession(platformView: string): SessionData {
   };
 }
 
-export function getWelcomeMessage(): Message {
+// ----- Helpers for action-button handling (called from ChatWindow) -----
+
+export function getSymptomIndexForState(state: ConversationState): number | null {
+  if (typeof state !== 'string' || !state.startsWith('SYMPTOM_')) return null;
+  const n = parseInt(state.replace('SYMPTOM_', ''), 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+export function getSymptomQuestionByIndex(index: number): ScreeningQuestion | null {
+  return SYMPTOM_QUESTIONS[index - 1] || null;
+}
+
+export function getScreeningActionOptions(): MessageOption[] {
+  const explain = t('opt.screening_action.explain', RESPONSE_OPTIONS.screening_action.explain);
+  const back = t('opt.screening_action.back', RESPONSE_OPTIONS.screening_action.back);
+  const exit = t('opt.screening_action.exit', RESPONSE_OPTIONS.screening_action.exit);
+  return [
+    { id: 'act_explain', labelMm: explain.mm, labelEn: explain.en },
+    { id: 'act_back', labelMm: back.mm, labelEn: back.en },
+    { id: 'act_exit', labelMm: exit.mm, labelEn: exit.en },
+  ];
+}
+
+export function buildSymptomMessage(question: ScreeningQuestion): Message {
+  const qText = t(`question.${question.id}.text`, { en: question.textEn, mm: question.textMm });
+  const yes = t('opt.yes_no.yes', RESPONSE_OPTIONS.yes_no.yes);
+  const no = t('opt.yes_no.no', RESPONSE_OPTIONS.yes_no.no);
   return {
     id: generateId(),
     sender: 'bot',
-    textMm: BOT_MESSAGES.welcome.mm,
-    textEn: BOT_MESSAGES.welcome.en,
+    textMm: `မေးခွန်း ${question.index}/8:\n${qText.mm}`,
+    textEn: `Question ${question.index}/8:\n${qText.en}`,
     timestamp: Date.now(),
     options: [
-      { id: 'start_yes', labelMm: RESPONSE_OPTIONS.start.yes.mm, labelEn: RESPONSE_OPTIONS.start.yes.en },
-      { id: 'start_no', labelMm: RESPONSE_OPTIONS.start.no.mm, labelEn: RESPONSE_OPTIONS.start.no.en },
+      { id: 'yes', labelMm: yes.mm, labelEn: yes.en },
+      { id: 'no', labelMm: no.mm, labelEn: no.en },
+      ...getScreeningActionOptions(),
     ],
     optionType: 'single',
   };
 }
+
+export function buildExplanationMessage(question: ScreeningQuestion): Message {
+  const expl = t(`question.${question.id}.explanation`, {
+    en: question.explanationEn,
+    mm: question.explanationMm,
+  });
+  return {
+    id: generateId(),
+    sender: 'bot',
+    textMm: `💡 ${expl.mm}`,
+    textEn: `💡 ${expl.en}`,
+    timestamp: Date.now(),
+  };
+}
+
+export function buildBackAtFirstMessage(): Message {
+  const msg = t('msg.screening_back_at_first', BOT_MESSAGES.screening_back_at_first);
+  return {
+    id: generateId(),
+    sender: 'bot',
+    textMm: msg.mm,
+    textEn: msg.en,
+    timestamp: Date.now(),
+  };
+}
+
+export function buildExitMessage(): Message {
+  const msg = t('msg.screening_exit_confirmation', BOT_MESSAGES.screening_exit_confirmation);
+  return {
+    id: generateId(),
+    sender: 'bot',
+    textMm: msg.mm,
+    textEn: msg.en,
+    timestamp: Date.now(),
+    options: getEndOptions(),
+    optionType: 'single',
+  };
+}
+
+export function getLandingMessage(): Message {
+  const body = t('msg.landing_branching', BOT_MESSAGES.landing_branching);
+  const c1 = t('opt.landing.choice_1', RESPONSE_OPTIONS.landing.choice_1);
+  const c2 = t('opt.landing.choice_2', RESPONSE_OPTIONS.landing.choice_2);
+  const c1Label = t('msg.landing_choice_1_label', BOT_MESSAGES.landing_choice_1_label);
+  const c2Label = t('msg.landing_choice_2_label', BOT_MESSAGES.landing_choice_2_label);
+  return {
+    id: generateId(),
+    sender: 'bot',
+    textMm: body.mm,
+    textEn: body.en,
+    timestamp: Date.now(),
+    options: [
+      { id: 'landing_1', labelMm: `${c1.mm} — ${c1Label.mm}`, labelEn: `${c1.en} — ${c1Label.en}` },
+      { id: 'landing_2', labelMm: `${c2.mm} — ${c2Label.mm}`, labelEn: `${c2.en} — ${c2Label.en}` },
+    ],
+    optionType: 'single',
+  };
+}
+
+// Legacy export — page.tsx still imports this. Maps to the new landing.
+export const getWelcomeMessage = getLandingMessage;
 
 export function processUserInput(
   state: ConversationState,
@@ -117,20 +209,30 @@ export function processUserInput(
   const updatedSession = { ...session };
 
   switch (state) {
-    case 'WELCOME': {
-      if (input === 'start_yes') {
+    case 'LANDING': {
+      if (input === 'landing_1') {
+        updatedSession.landingChoice = '1';
         return {
           nextState: 'ASK_AGE',
-          botMessage: createBotMessage(BOT_MESSAGES.ask_age),
+          botMessage: createBotMessage(t('msg.ask_age', BOT_MESSAGES.ask_age)),
           updatedSession,
         };
-      } else {
+      }
+      if (input === 'landing_2') {
+        updatedSession.landingChoice = '2';
+        updatedSession.status = 'completed';
         return {
-          nextState: 'DECLINE',
-          botMessage: createBotMessage(BOT_MESSAGES.decline_screening, getEndOptions()),
-          updatedSession: { ...updatedSession, status: 'completed' },
+          nextState: 'P3_STUB',
+          botMessage: createBotMessage(t('msg.p3_stub', BOT_MESSAGES.p3_stub), getEndOptions()),
+          updatedSession,
         };
       }
+      // Unknown input — re-show landing
+      return {
+        nextState: 'LANDING',
+        botMessage: getLandingMessage(),
+        updatedSession,
+      };
     }
 
     case 'ASK_AGE': {
@@ -138,7 +240,7 @@ export function processUserInput(
       if (isNaN(age) || age < 0 || age > 150) {
         return {
           nextState: 'ASK_AGE',
-          botMessage: createBotMessage(BOT_MESSAGES.age_invalid),
+          botMessage: createBotMessage(t('msg.age_invalid', BOT_MESSAGES.age_invalid)),
           updatedSession,
         };
       }
@@ -148,13 +250,13 @@ export function processUserInput(
         updatedSession.status = 'completed';
         return {
           nextState: 'AGE_UNDER_15',
-          botMessage: createBotMessage(BOT_MESSAGES.age_under_15, getEndOptions()),
+          botMessage: createBotMessage(t('msg.age_under_15', BOT_MESSAGES.age_under_15), getEndOptions()),
           updatedSession,
         };
       }
       return {
         nextState: 'SYMPTOM_INTRO',
-        botMessage: createBotMessage(BOT_MESSAGES.symptom_intro),
+        botMessage: createBotMessage(t('msg.symptom_intro', BOT_MESSAGES.symptom_intro)),
         updatedSession,
       };
     }
@@ -164,7 +266,7 @@ export function processUserInput(
       const q = SYMPTOM_QUESTIONS[0];
       return {
         nextState: 'SYMPTOM_1',
-        botMessage: createSymptomMessage(q),
+        botMessage: buildSymptomMessage(q),
         updatedSession,
       };
     }
@@ -185,15 +287,15 @@ export function processUserInput(
         const nextQuestion = SYMPTOM_QUESTIONS[currentIndex];
         return {
           nextState: `SYMPTOM_${currentIndex + 1}` as ConversationState,
-          botMessage: createSymptomMessage(nextQuestion),
+          botMessage: buildSymptomMessage(nextQuestion),
           updatedSession,
         };
       }
       // After last symptom, ask name
       return {
         nextState: 'ASK_NAME',
-        botMessage: createBotMessage(BOT_MESSAGES.ask_name, [
-          { id: 'skip', labelMm: BOT_MESSAGES.skip.mm, labelEn: BOT_MESSAGES.skip.en },
+        botMessage: createBotMessage(t('msg.ask_name', BOT_MESSAGES.ask_name), [
+          { id: 'skip', labelMm: t('msg.skip', BOT_MESSAGES.skip).mm, labelEn: t('msg.skip', BOT_MESSAGES.skip).en },
         ]),
         updatedSession,
       };
@@ -203,12 +305,15 @@ export function processUserInput(
       if (input !== 'skip') {
         updatedSession.clientName = input;
       }
+      const skip = t('msg.skip', BOT_MESSAGES.skip);
+      const male = t('opt.gender.male', RESPONSE_OPTIONS.gender.male);
+      const female = t('opt.gender.female', RESPONSE_OPTIONS.gender.female);
       return {
         nextState: 'ASK_GENDER',
-        botMessage: createBotMessage(BOT_MESSAGES.ask_gender, [
-          { id: 'male', labelMm: RESPONSE_OPTIONS.gender.male.mm, labelEn: RESPONSE_OPTIONS.gender.male.en },
-          { id: 'female', labelMm: RESPONSE_OPTIONS.gender.female.mm, labelEn: RESPONSE_OPTIONS.gender.female.en },
-          { id: 'skip', labelMm: BOT_MESSAGES.skip.mm, labelEn: BOT_MESSAGES.skip.en },
+        botMessage: createBotMessage(t('msg.ask_gender', BOT_MESSAGES.ask_gender), [
+          { id: 'male', labelMm: male.mm, labelEn: male.en },
+          { id: 'female', labelMm: female.mm, labelEn: female.en },
+          { id: 'skip', labelMm: skip.mm, labelEn: skip.en },
         ]),
         updatedSession,
       };
@@ -218,12 +323,15 @@ export function processUserInput(
       if (input !== 'skip') {
         updatedSession.clientGender = input === 'male' ? 'M' : 'F';
       }
+      const dm = t('opt.conditions.dm', RESPONSE_OPTIONS.conditions.dm);
+      const hiv = t('opt.conditions.hiv', RESPONSE_OPTIONS.conditions.hiv);
+      const none = t('opt.conditions.none', RESPONSE_OPTIONS.conditions.none);
       return {
         nextState: 'ASK_CONDITIONS',
-        botMessage: createBotMessage(BOT_MESSAGES.ask_conditions, [
-          { id: 'dm', labelMm: RESPONSE_OPTIONS.conditions.dm.mm, labelEn: RESPONSE_OPTIONS.conditions.dm.en },
-          { id: 'hiv', labelMm: RESPONSE_OPTIONS.conditions.hiv.mm, labelEn: RESPONSE_OPTIONS.conditions.hiv.en },
-          { id: 'none', labelMm: RESPONSE_OPTIONS.conditions.none.mm, labelEn: RESPONSE_OPTIONS.conditions.none.en },
+        botMessage: createBotMessage(t('msg.ask_conditions', BOT_MESSAGES.ask_conditions), [
+          { id: 'dm', labelMm: dm.mm, labelEn: dm.en },
+          { id: 'hiv', labelMm: hiv.mm, labelEn: hiv.en },
+          { id: 'none', labelMm: none.mm, labelEn: none.en },
         ], 'multi'),
         updatedSession,
       };
@@ -239,20 +347,24 @@ export function processUserInput(
       updatedSession.classification = hasSymptoms ? 'Presumptive TB' : 'Not Presumptive TB';
 
       if (hasSymptoms) {
+        const assisted = t('opt.referral_type.assisted', RESPONSE_OPTIONS.referral_type.assisted);
+        const self = t('opt.referral_type.self', RESPONSE_OPTIONS.referral_type.self);
         return {
           nextState: 'REFERRAL_CHOICE',
-          botMessage: createBotMessage(BOT_MESSAGES.result_presumptive, [
-            { id: 'assisted', labelMm: RESPONSE_OPTIONS.referral_type.assisted.mm, labelEn: RESPONSE_OPTIONS.referral_type.assisted.en },
-            { id: 'self', labelMm: RESPONSE_OPTIONS.referral_type.self.mm, labelEn: RESPONSE_OPTIONS.referral_type.self.en },
+          botMessage: createBotMessage(t('msg.result_presumptive', BOT_MESSAGES.result_presumptive), [
+            { id: 'assisted', labelMm: assisted.mm, labelEn: assisted.en },
+            { id: 'self', labelMm: self.mm, labelEn: self.en },
           ]),
           updatedSession,
         };
       }
+      const notPres = t('msg.result_not_presumptive', BOT_MESSAGES.result_not_presumptive);
+      const hEd = t('msg.health_education', BOT_MESSAGES.health_education);
       return {
         nextState: 'HEALTH_EDUCATION',
         botMessage: createBotMessage({
-          mm: BOT_MESSAGES.result_not_presumptive.mm + '\n\n' + BOT_MESSAGES.health_education.mm,
-          en: BOT_MESSAGES.result_not_presumptive.en + '\n\n' + BOT_MESSAGES.health_education.en,
+          mm: notPres.mm + '\n\n' + hEd.mm,
+          en: notPres.en + '\n\n' + hEd.en,
         }, getEndOptions()),
         updatedSession: { ...updatedSession, referralType: 'None', status: 'completed' },
       };
@@ -264,14 +376,14 @@ export function processUserInput(
         updatedSession.referralType = 'Assisted';
         return {
           nextState: 'ASSISTED_ASK_PHONE',
-          botMessage: createBotMessage(BOT_MESSAGES.assisted_referral_ask_phone),
+          botMessage: createBotMessage(t('msg.assisted_referral_ask_phone', BOT_MESSAGES.assisted_referral_ask_phone)),
           updatedSession,
         };
       }
       updatedSession.referralType = 'Self';
       return {
         nextState: 'SELF_ASK_TOWNSHIP',
-        botMessage: createBotMessage(BOT_MESSAGES.self_referral_ask_township),
+        botMessage: createBotMessage(t('msg.self_referral_ask_township', BOT_MESSAGES.self_referral_ask_township)),
         updatedSession,
       };
     }
@@ -280,12 +392,13 @@ export function processUserInput(
       updatedSession.clientPhone = input;
       updatedSession.status = 'completed';
       const scrId = updatedSession.screeningId || '';
-      const idMsg = BOT_MESSAGES.screening_id_instruction;
+      const idMsg = t('msg.screening_id_instruction', BOT_MESSAGES.screening_id_instruction);
+      const result = t('msg.assisted_referral_result', BOT_MESSAGES.assisted_referral_result);
       return {
         nextState: 'ASSISTED_RESULT',
         botMessage: createBotMessage({
-          mm: BOT_MESSAGES.assisted_referral_result.mm + idMsg.mm.replace('{SCREENING_ID}', scrId),
-          en: BOT_MESSAGES.assisted_referral_result.en + idMsg.en.replace('{SCREENING_ID}', scrId),
+          mm: result.mm + idMsg.mm.replace('{SCREENING_ID}', scrId),
+          en: result.en + idMsg.en.replace('{SCREENING_ID}', scrId),
         }, getEndOptions()),
         updatedSession,
       };
@@ -293,10 +406,11 @@ export function processUserInput(
 
     case 'SELF_ASK_TOWNSHIP': {
       updatedSession.referralTownship = input;
+      const skip = t('msg.skip', BOT_MESSAGES.skip);
       return {
         nextState: 'SELF_ASK_CONTACT',
-        botMessage: createBotMessage(BOT_MESSAGES.self_referral_ask_contact, [
-          { id: 'skip', labelMm: BOT_MESSAGES.skip.mm, labelEn: BOT_MESSAGES.skip.en },
+        botMessage: createBotMessage(t('msg.self_referral_ask_contact', BOT_MESSAGES.self_referral_ask_contact), [
+          { id: 'skip', labelMm: skip.mm, labelEn: skip.en },
         ]),
         updatedSession,
       };
@@ -307,7 +421,6 @@ export function processUserInput(
         updatedSession.clientPhone = input;
       }
       // The actual referral site lookup happens in the component
-      // This state signals the component to fetch and display results
       updatedSession.status = 'completed';
       return {
         nextState: 'SELF_RESULT',
@@ -318,27 +431,29 @@ export function processUserInput(
 
     case 'AGE_UNDER_15':
     case 'DECLINE':
+    case 'EXITED':
+    case 'P3_STUB':
     case 'HEALTH_EDUCATION':
     case 'ASSISTED_RESULT':
     case 'SELF_RESULT':
     case 'END_OPTIONS': {
       if (input === 'new_screening') {
         return {
-          nextState: 'WELCOME',
-          botMessage: getWelcomeMessage(),
+          nextState: 'LANDING',
+          botMessage: getLandingMessage(),
           updatedSession: createInitialSession(session.platformView),
         };
       }
       if (input === 'other_questions') {
         return {
           nextState: 'OTHER_QUESTIONS',
-          botMessage: createBotMessage(BOT_MESSAGES.other_questions_placeholder, getEndOptions()),
+          botMessage: createBotMessage(t('msg.other_questions_placeholder', BOT_MESSAGES.other_questions_placeholder), getEndOptions()),
           updatedSession,
         };
       }
       return {
         nextState: 'GOODBYE',
-        botMessage: createBotMessage(BOT_MESSAGES.goodbye),
+        botMessage: createBotMessage(t('msg.goodbye', BOT_MESSAGES.goodbye)),
         updatedSession: { ...updatedSession, completedAt: new Date().toISOString() },
       };
     }
@@ -349,15 +464,15 @@ export function processUserInput(
       }
       return {
         nextState: 'OTHER_QUESTIONS',
-        botMessage: createBotMessage(BOT_MESSAGES.other_questions_placeholder, getEndOptions()),
+        botMessage: createBotMessage(t('msg.other_questions_placeholder', BOT_MESSAGES.other_questions_placeholder), getEndOptions()),
         updatedSession,
       };
     }
 
     default:
       return {
-        nextState: 'WELCOME',
-        botMessage: getWelcomeMessage(),
+        nextState: 'LANDING',
+        botMessage: getLandingMessage(),
         updatedSession,
       };
   }
@@ -379,26 +494,14 @@ function createBotMessage(
   };
 }
 
-function createSymptomMessage(question: typeof SYMPTOM_QUESTIONS[number]): Message {
-  return {
-    id: generateId(),
-    sender: 'bot',
-    textMm: `မေးခွန်း ${question.index}/8:\n${question.textMm}`,
-    textEn: `Question ${question.index}/8:\n${question.textEn}`,
-    timestamp: Date.now(),
-    options: [
-      { id: 'yes', labelMm: RESPONSE_OPTIONS.yes_no.yes.mm, labelEn: RESPONSE_OPTIONS.yes_no.yes.en },
-      { id: 'no', labelMm: RESPONSE_OPTIONS.yes_no.no.mm, labelEn: RESPONSE_OPTIONS.yes_no.no.en },
-    ],
-    optionType: 'single',
-  };
-}
-
 function getEndOptions(): MessageOption[] {
+  const ns = t('opt.end_options.new_screening', RESPONSE_OPTIONS.end_options.new_screening);
+  const oq = t('opt.end_options.other_questions', RESPONSE_OPTIONS.end_options.other_questions);
+  const end = t('opt.end_options.end', RESPONSE_OPTIONS.end_options.end);
   return [
-    { id: 'new_screening', labelMm: RESPONSE_OPTIONS.end_options.new_screening.mm, labelEn: RESPONSE_OPTIONS.end_options.new_screening.en },
-    { id: 'other_questions', labelMm: RESPONSE_OPTIONS.end_options.other_questions.mm, labelEn: RESPONSE_OPTIONS.end_options.other_questions.en },
-    { id: 'end', labelMm: RESPONSE_OPTIONS.end_options.end.mm, labelEn: RESPONSE_OPTIONS.end_options.end.en },
+    { id: 'new_screening', labelMm: ns.mm, labelEn: ns.en },
+    { id: 'other_questions', labelMm: oq.mm, labelEn: oq.en },
+    { id: 'end', labelMm: end.mm, labelEn: end.en },
   ];
 }
 

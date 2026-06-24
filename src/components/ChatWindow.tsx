@@ -7,12 +7,17 @@ import {
   ConversationState,
   SessionData,
   processUserInput,
-  getWelcomeMessage,
-  createInitialSession,
   generateReferralLetter,
   generateId,
+  getSymptomIndexForState,
+  getSymptomQuestionByIndex,
+  buildSymptomMessage,
+  buildExplanationMessage,
+  buildBackAtFirstMessage,
+  buildExitMessage,
 } from '@/lib/chatEngine';
 import { BOT_MESSAGES } from '@/data/messages';
+import { t } from '@/lib/textRegistry';
 
 interface ChatWindowProps {
   theme: PlatformTheme;
@@ -164,7 +169,7 @@ export default function ChatWindow({
       return;
     }
 
-    if (result.nextState === 'WELCOME' && conversationState !== 'WELCOME') {
+    if (result.nextState === 'LANDING' && conversationState !== 'LANDING') {
       // New screening - reset messages
       setMessages([]);
       setTimeout(() => {
@@ -189,7 +194,72 @@ export default function ChatWindow({
     }
   }, [conversationState, session, selectedConditions, addBotMessageWithDelay, setMessages, setSession, setConversationState]);
 
+  const handleScreeningAction = useCallback((actionId: string, labelMm: string, labelEn: string) => {
+    const currentIndex = getSymptomIndexForState(conversationState);
+    if (currentIndex == null) return;
+
+    // Echo the user's tap as a user message
+    const userMessage: Message = {
+      id: generateId(),
+      sender: 'user',
+      textMm: labelMm,
+      textEn: labelEn,
+      timestamp: Date.now(),
+    };
+    setMessages((prev: Message[]) => [...prev, userMessage]);
+
+    if (actionId === 'act_explain') {
+      const q = getSymptomQuestionByIndex(currentIndex);
+      if (!q) return;
+      addBotMessageWithDelay(buildExplanationMessage(q));
+      // Re-show the same question after the explanation
+      setTimeout(() => {
+        addBotMessageWithDelay(buildSymptomMessage(q));
+      }, 1400);
+      return;
+    }
+
+    if (actionId === 'act_back') {
+      if (currentIndex <= 1) {
+        addBotMessageWithDelay(buildBackAtFirstMessage());
+        // Re-show the first question
+        const q = getSymptomQuestionByIndex(1);
+        if (q) setTimeout(() => addBotMessageWithDelay(buildSymptomMessage(q)), 1200);
+        return;
+      }
+      const prevIndex = currentIndex - 1;
+      const prevQ = getSymptomQuestionByIndex(prevIndex);
+      if (!prevQ) return;
+      // Clear the previous answer so the user can re-answer it
+      setSession((prev: SessionData) => {
+        const cleared = { ...prev, symptoms: { ...prev.symptoms } };
+        delete cleared.symptoms[prevQ.id];
+        return cleared;
+      });
+      setConversationState(`SYMPTOM_${prevIndex}` as ConversationState);
+      addBotMessageWithDelay(buildSymptomMessage(prevQ));
+      return;
+    }
+
+    if (actionId === 'act_exit') {
+      setSession((prev: SessionData) => ({
+        ...prev,
+        status: 'abandoned',
+        completedAt: new Date().toISOString(),
+      }));
+      setConversationState('EXITED');
+      addBotMessageWithDelay(buildExitMessage());
+      return;
+    }
+  }, [conversationState, setMessages, setSession, setConversationState, addBotMessageWithDelay]);
+
   const handleOptionClick = (optionId: string, labelMm: string, labelEn: string) => {
+    // Screening action buttons (What does this mean / Go back / Exit) — handle locally
+    if (optionId === 'act_explain' || optionId === 'act_back' || optionId === 'act_exit') {
+      handleScreeningAction(optionId, labelMm, labelEn);
+      return;
+    }
+
     if (conversationState === 'ASK_CONDITIONS' && optionId !== 'none') {
       // Multi-select for conditions
       setSelectedConditions(prev =>
@@ -359,7 +429,7 @@ export default function ChatWindow({
                   fontSize: theme.fontSize,
                 }}
               >
-                {BOT_MESSAGES.confirm.mm}
+                {t('msg.confirm', BOT_MESSAGES.confirm).mm}
               </button>
             )}
           </div>

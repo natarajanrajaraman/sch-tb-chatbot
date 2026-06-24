@@ -200,3 +200,88 @@ export async function getAllReferralLogs(): Promise<string[][]> {
     return [];
   }
 }
+
+// ----- Language Map -----
+// Columns: A=key, B=english, C=burmese, D=notes
+export interface LanguageMapEntry {
+  en: string;
+  mm: string;
+  notes?: string;
+}
+
+export async function getLanguageMap(): Promise<Record<string, LanguageMapEntry>> {
+  try {
+    const values = await getSheetValues('Language Map', 'A2:D2000');
+    const map: Record<string, LanguageMapEntry> = {};
+    for (const row of values) {
+      const key = (row?.[0] || '').toString().trim();
+      if (!key) continue;
+      map[key] = {
+        en: (row?.[1] || '').toString(),
+        mm: (row?.[2] || '').toString(),
+        notes: (row?.[3] || '').toString(),
+      };
+    }
+    return map;
+  } catch (error) {
+    console.error('getLanguageMap failed:', error);
+    return {};
+  }
+}
+
+async function ensureSheetTab(sheetName: string, headers: string[]): Promise<void> {
+  const sheets = getSheets();
+  const meta = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID });
+  const exists = (meta.data.sheets || []).some(
+    s => s.properties?.title === sheetName
+  );
+  if (!exists) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: SPREADSHEET_ID,
+      requestBody: {
+        requests: [{ addSheet: { properties: { title: sheetName } } }],
+      },
+    });
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `${sheetName}!A1`,
+      valueInputOption: 'RAW',
+      requestBody: { values: [headers] },
+    });
+  }
+}
+
+export async function seedLanguageMap(
+  entries: { key: string; en: string; mm: string; notes?: string }[]
+): Promise<{ created: number; skippedExisting: number; tabCreated: boolean }> {
+  const sheets = getSheets();
+  const headers = ['key', 'english', 'burmese', 'notes'];
+
+  // Check if tab existed before we touched it
+  const metaBefore = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID });
+  const existedBefore = (metaBefore.data.sheets || []).some(
+    s => s.properties?.title === 'Language Map'
+  );
+
+  await ensureSheetTab('Language Map', headers);
+
+  // Read existing keys so we don't overwrite tweaks
+  const existing = await getSheetValues('Language Map', 'A2:A2000');
+  const existingKeys = new Set(
+    existing.map(r => (r?.[0] || '').toString().trim()).filter(Boolean)
+  );
+
+  const newRows = entries
+    .filter(e => !existingKeys.has(e.key))
+    .map(e => [e.key, e.en, e.mm, e.notes || '']);
+
+  if (newRows.length > 0) {
+    await appendToSheet('Language Map', newRows);
+  }
+
+  return {
+    created: newRows.length,
+    skippedExisting: entries.length - newRows.length,
+    tabCreated: !existedBefore,
+  };
+}

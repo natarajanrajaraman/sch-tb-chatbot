@@ -1,6 +1,28 @@
 // All bot messages in Burmese (primary) and English (translation panel)
+// Keys here mirror the identifiers used in the Language Map Google Sheet.
 
 export const BOT_MESSAGES = {
+  // Landing — initial branching question (P1 self-check vs P3 patient info)
+  landing_branching: {
+    mm: 'မင်္ဂလာပါ! ကျေးဇူးပြု၍ ရွေးချယ်ပါ -\n\n(၁) တီဘီရောဂါလက္ခဏာများနှင့် ရောဂါလက္ခဏာများကို ကိုယ်တိုင်စစ်ဆေးလိုပါသလား။\n\nသို့မဟုတ်\n\n(၂) တီဘီရောဂါနှင့် ၎င်း၏ကုသမှုအချက်အလက်များအကြောင်း ပိုမိုသိရှိလိုသော တီဘီလူနာ သို့မဟုတ် တီဘီလူနာကို ပြုစုစောင့်ရှောက်သူတစ်ဦးဖြစ်ပါသလား။\n\n"၁" သို့မဟုတ် "၂" ကို နှိပ်၍ ဆက်လက်ဆောင်ရွက်ပါ။',
+    en: 'Hello! Please choose:\n\n(1) Do you want to self-check for TB signs and symptoms?\n\nOr\n\n(2) Are you a TB patient or care giver of a TB patient who wants to know more about TB and its treatment info?\n\nTap "1" or "2" to continue.',
+  },
+  landing_choice_1_label: {
+    mm: '(၁) ကိုယ်တိုင်စစ်ဆေးမည်',
+    en: '(1) Self-check',
+  },
+  landing_choice_2_label: {
+    mm: '(၂) တီဘီရောဂါ အချက်အလက်',
+    en: '(2) TB patient info',
+  },
+
+  // P3 stub — adherence chatbot is not yet built
+  p3_stub: {
+    mm: '🙏 ကျေးဇူးတင်ပါသည်။\n\nတီဘီရောဂါ ကုသမှု၊ ဆေးသောက်ပုံ၊ ဘေးထွက်ဆိုးကျိုးများနှင့် ပြုစုစောင့်ရှောက်ခြင်းအကြောင်း မေးခွန်းများကို ဖြေဆိုပေးနိုင်သော Chatbot ကို လောလောဆယ် တည်ဆောက်နေပါသည်။\n\nအရေးတကြီး ဆေးကုသမှု လိုအပ်ပါက ကျေးဇူးပြု၍ "နေ" ဆေးခန်း၏ Tele-Health အဖွဲ့ (သို့) သင့်ကုသနေသော ဆရာဝန်/ဆရာမထံ တိုက်ရိုက် ဆက်သွယ်ပါ။',
+    en: '🙏 Thank you.\n\nThe chatbot that answers questions about TB treatment, medication, side-effects and patient care is currently being built.\n\nIf you need urgent medical help, please contact the Sun Tele-Health team or your treating clinician directly.',
+  },
+
+  // Original welcome (kept for legacy; no longer the entry point)
   welcome: {
     mm: 'မင်္ဂလာပါ! တီဘီရောဂါ ကိုယ်တိုင်စစ်ဆေးခြင်း စနစ်မှ ကြိုဆိုပါသည်။\n\nဤစစ်ဆေးမှုသည် သင့်တွင် တီဘီရောဂါ လက္ခဏာများ ရှိ/မရှိ စစ်ဆေးရန် ကူညီပေးပါမည်။ စစ်ဆေးမှု စတင်လိုပါသလား?',
     en: 'Hello! Welcome to the TB Self-Screening System.\n\nThis screening will help check whether you may have symptoms of tuberculosis (TB). Would you like to start the screening?',
@@ -101,4 +123,27 @@ export const BOT_MESSAGES = {
     mm: '\n\n🆔 သင့် စစ်ဆေးမှု ID: {SCREENING_ID}\nကျေးဇူးပြု၍ ဤ ID ကို Tele-Health အဖွဲ့ (သို့) တီဘီစစ်ဆေးရေးစင်တာသို့ ပေးပါ။',
     en: '\n\n🆔 Your Screening ID: {SCREENING_ID}\nPlease share this ID with the Tele-Health team or the TB screening center.',
   },
+
+  // Per-question action buttons (added to every symptom/risk question)
+  screening_action_explain: {
+    mm: '❓ ဤမေးခွန်းကို ရှင်းပြပါ',
+    en: '❓ What does this mean?',
+  },
+  screening_action_back: {
+    mm: '⬅️ အရင်မေးခွန်းသို့',
+    en: '⬅️ Go back',
+  },
+  screening_action_exit: {
+    mm: '✖️ စစ်ဆေးခြင်း ရပ်ဆိုင်းမည်',
+    en: '✖️ Exit screening',
+  },
+  screening_back_at_first: {
+    mm: 'ဤသည် ပထမဆုံးမေးခွန်း ဖြစ်ပါသည်။ ဆက်လက်စစ်ဆေးရန် "ဟုတ်ကဲ့" သို့မဟုတ် "မဟုတ်ပါ" ကို နှိပ်ပါ။',
+    en: 'This is the first question. Please tap "Yes" or "No" to continue, or "Exit screening" to stop.',
+  },
+  screening_exit_confirmation: {
+    mm: 'စစ်ဆေးခြင်းကို ရပ်ဆိုင်းပါပြီ။ မည်သည့်အချိန်တွင်မဆို ပြန်လည်စတင်နိုင်ပါသည်။ ကျန်းမာပါစေ! 🙏',
+    en: 'Screening has been stopped. You can restart at any time. Stay healthy! 🙏',
+  },
 };
+

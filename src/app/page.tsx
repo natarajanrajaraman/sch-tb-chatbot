@@ -12,22 +12,45 @@ import {
   getWelcomeMessage,
   createInitialSession,
 } from '@/lib/chatEngine';
+import { setOverrides } from '@/lib/textRegistry';
+
+const DEFAULT_PLATFORM: PlatformType = 'viber';
 
 export default function Home() {
-  const [platform, setPlatform] = useState<PlatformType>('messenger');
+  const [platform, setPlatform] = useState<PlatformType>(DEFAULT_PLATFORM);
   const [debugPanelOpen, setDebugPanelOpen] = useState(false);
   const [translationOpen, setTranslationOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [session, setSession] = useState<SessionData>(createInitialSession('messenger'));
-  const [conversationState, setConversationState] = useState<ConversationState>('WELCOME');
+  const [session, setSession] = useState<SessionData>(createInitialSession(DEFAULT_PLATFORM));
+  const [conversationState, setConversationState] = useState<ConversationState>('LANDING');
   const [mounted, setMounted] = useState(false);
 
   const theme = PLATFORM_THEMES[platform];
 
   useEffect(() => {
+    let cancelled = false;
     setMounted(true);
-    const welcomeMsg = getWelcomeMessage();
-    setMessages([welcomeMsg]);
+    // Load the latest language map, then show the landing message
+    (async () => {
+      try {
+        const res = await fetch('/api/language-map', { cache: 'no-store' });
+        if (res.ok) {
+          const data = await res.json();
+          if (!cancelled && data?.map) {
+            setOverrides(data.map);
+          }
+        }
+      } catch {
+        // Fall back to default strings
+      } finally {
+        if (!cancelled) {
+          setMessages([getWelcomeMessage()]);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handlePlatformChange = (newPlatform: PlatformType) => {
@@ -38,7 +61,7 @@ export default function Home() {
   const handleRestart = useCallback(() => {
     const newSession = createInitialSession(platform);
     setSession(newSession);
-    setConversationState('WELCOME');
+    setConversationState('LANDING');
     setMessages([getWelcomeMessage()]);
   }, [platform]);
 
