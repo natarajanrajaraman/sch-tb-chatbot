@@ -25,6 +25,7 @@ export default function CareReferralLogTable({
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
   const [editValues, setEditValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState('');
 
   if (data.length === 0) {
     return (
@@ -35,7 +36,11 @@ export default function CareReferralLogTable({
   }
 
   const headers = data[0] || [];
-  const rows = data.slice(1);
+  const allRows = data.slice(1);
+  const q = search.trim().toLowerCase();
+  const rows = q
+    ? allRows.filter(r => (r[0] || '').toLowerCase().includes(q))
+    : allRows;
 
   const handleExpand = (rowIdx: number) => {
     if (!editable) return;
@@ -70,14 +75,34 @@ export default function CareReferralLogTable({
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-bold text-gray-800">Care Referral Log ({rows.length} records)</h2>
-        <button
-          onClick={() => downloadCSV(data, 'Care Referral Log')}
-          className="px-3 py-1.5 bg-green-600 text-white text-xs rounded-md hover:bg-green-700"
-        >
-          Download CSV
-        </button>
+      <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
+        <h2 className="text-lg font-bold text-gray-800">
+          Care Referral Log ({rows.length}{q ? ` of ${allRows.length}` : ''} records)
+        </h2>
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search by careReferralId (e.g. CR-...)"
+            className="px-3 py-1.5 text-xs border rounded-md w-64 focus:ring-1 focus:ring-blue-400 outline-none"
+          />
+          {q && (
+            <button
+              onClick={() => setSearch('')}
+              className="px-2 py-1.5 text-xs text-gray-500 hover:text-gray-700"
+              title="Clear search"
+            >
+              ✕
+            </button>
+          )}
+          <button
+            onClick={() => downloadCSV(data, 'Care Referral Log')}
+            className="px-3 py-1.5 bg-green-600 text-white text-xs rounded-md hover:bg-green-700"
+          >
+            Download CSV
+          </button>
+        </div>
       </div>
       {editable && (
         <div className="text-xs text-gray-500 mb-2">

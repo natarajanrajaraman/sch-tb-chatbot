@@ -92,13 +92,18 @@ export default function ScreeningReferralLogTable({
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
   const [editValues, setEditValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState('');
 
   if (data.length === 0) {
     return <div className="text-center py-12 text-gray-400">No screening referral log data yet.</div>;
   }
 
   const headers = data[0] || [];
-  const rows = data.slice(1);
+  const allRows = data.slice(1);
+  const q = search.trim().toLowerCase();
+  const rows = q
+    ? allRows.filter(r => (r[0] || '').toLowerCase().includes(q))
+    : allRows;
 
   // SLA summary counters
   const slaCounts = rows.reduce((acc, r) => {
@@ -122,13 +127,13 @@ export default function ScreeningReferralLogTable({
     setEditValues(values);
   };
 
-  const handleSave = async (referralId: string) => {
+  const handleSave = async (screeningReferralId: string) => {
     setSaving(true);
     try {
       await fetch('/api/referral-log', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ referralId, ...editValues }),
+        body: JSON.stringify({ screeningReferralId, ...editValues }),
       });
       onRefresh();
     } catch (e) {
@@ -141,14 +146,34 @@ export default function ScreeningReferralLogTable({
   // Visible headers — we add the SLA column to the end
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-bold text-gray-800">Screening Referral Log ({rows.length} records)</h2>
-        <button
-          onClick={() => downloadCSV(data, 'Screening Referral Log')}
-          className="px-3 py-1.5 bg-green-600 text-white text-xs rounded-md hover:bg-green-700"
-        >
-          Download CSV
-        </button>
+      <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
+        <h2 className="text-lg font-bold text-gray-800">
+          Screening Referral Log ({rows.length}{q ? ` of ${allRows.length}` : ''} records)
+        </h2>
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search by screeningReferralId (e.g. SR-..., REF-...)"
+            className="px-3 py-1.5 text-xs border rounded-md w-72 focus:ring-1 focus:ring-blue-400 outline-none"
+          />
+          {q && (
+            <button
+              onClick={() => setSearch('')}
+              className="px-2 py-1.5 text-xs text-gray-500 hover:text-gray-700"
+              title="Clear search"
+            >
+              ✕
+            </button>
+          )}
+          <button
+            onClick={() => downloadCSV(data, 'Screening Referral Log')}
+            className="px-3 py-1.5 bg-green-600 text-white text-xs rounded-md hover:bg-green-700"
+          >
+            Download CSV
+          </button>
+        </div>
       </div>
 
       {/* SLA banner — encodes the 2-week / 2-attempt follow-up rule */}

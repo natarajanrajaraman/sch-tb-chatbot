@@ -40,7 +40,10 @@ export async function POST(request: NextRequest) {
     // If there's a referral, also log it
     if (body.referralType && body.referralType !== 'None') {
       await saveReferralLog(
-        `REF-${Date.now()}`,
+        // SR- prefix in v0.8 makes the screening-referral ID visually distinct
+        // from CR- care-referral IDs. Legacy rows with REF- prefix continue to
+        // work because lookups are exact-string matches on column A.
+        `SR-${Date.now()}`,
         body.conversationId,
         body.clientName || '',
         body.clientAge?.toString() || '',

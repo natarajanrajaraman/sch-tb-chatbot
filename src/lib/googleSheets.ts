@@ -180,14 +180,14 @@ export async function saveFeedback(feedbackId: string, conversationId: string, f
 }
 
 export async function saveReferralLog(
-  referralId: string, conversationId: string, clientName: string,
+  screeningReferralId: string, conversationId: string, clientName: string,
   clientAge: string, clientGender: string, referralType: string,
   township: string, facilityNames: string, status: string,
   screeningId: string
 ): Promise<void> {
   const timestamp = new Date().toISOString();
   await appendToSheet('Referral Log', [
-    [referralId, conversationId, timestamp, clientName, clientAge, clientGender, referralType, township, facilityNames, 'Yes', status, screeningId],
+    [screeningReferralId, conversationId, timestamp, clientName, clientAge, clientGender, referralType, township, facilityNames, 'Yes', status, screeningId],
   ]);
 }
 
@@ -211,8 +211,9 @@ export async function getAllFeedback(): Promise<string[][]> {
 // per the old SCH FB bot's "Reached / Lost / Referred" model. Old columns
 // (A-T = referralId..xpertResult) are unchanged; new columns extend to AB.
 export const REFERRAL_LOG_HEADERS = [
-  // A-L
-  'referralId', 'conversationId', 'timestamp', 'clientName',
+  // A-L  — column A renamed referralId → screeningReferralId in v0.8 to
+  // disambiguate from careReferralId on the Care Referral Log tab.
+  'screeningReferralId', 'conversationId', 'timestamp', 'clientName',
   'clientAge', 'clientGender', 'referralType', 'township',
   'facilityNames', 'referred', 'status', 'screeningId',
   // M-T  (telehealth-editable follow-up — bug fix: writes now start at M, not L)
@@ -259,11 +260,11 @@ const EDITABLE_FOLLOWUP_KEYS: (keyof ReferralFollowUp)[] = [
 ];
 
 export async function updateReferralLogFollowUp(
-  referralId: string,
+  screeningReferralId: string,
   followUp: ReferralFollowUp
 ): Promise<boolean> {
   const allData = await getSheetValues('Referral Log', 'A1:AB2000');
-  const rowIndex = allData.findIndex(row => row[0] === referralId);
+  const rowIndex = allData.findIndex(row => row[0] === screeningReferralId);
   if (rowIndex < 0) return false;
 
   const sheetRow = rowIndex + 1;

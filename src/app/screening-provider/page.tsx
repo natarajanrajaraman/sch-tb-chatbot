@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import AuthGate from '@/components/AuthGate';
-import CareReferralLogTable from '@/components/dashboard/CareReferralLogTable';
+import ScreeningReferralLogTable from '@/components/dashboard/ScreeningReferralLogTable';
 
 export default function ScreeningProviderPage() {
   return (
@@ -19,7 +19,7 @@ function ScreeningProviderInner() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/care-referral-log');
+      const res = await fetch('/api/referral-log');
       const json = await res.json();
       setData(json.data || []);
     } catch (e) {
@@ -37,7 +37,7 @@ function ScreeningProviderInner() {
       <div className="bg-gray-800 text-white px-6 py-4 flex items-center justify-between">
         <div>
           <h1 className="text-lg font-bold">TB Screening Provider View — SCH TB Chatbot</h1>
-          <p className="text-xs text-gray-400">Read-only view of care referrals routed from the chatbot.</p>
+          <p className="text-xs text-gray-400">View and edit the Screening Referral Log.</p>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -55,7 +55,7 @@ function ScreeningProviderInner() {
         {loading ? (
           <div className="text-center py-12 text-gray-500">Loading data…</div>
         ) : (
-          <CareReferralLogTable data={data} onRefresh={fetchData} editable={false} />
+          <ScreeningReferralLogTable data={data} onRefresh={fetchData} editable={true} />
         )}
       </div>
     </div>

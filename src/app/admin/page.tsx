@@ -346,13 +346,13 @@ function ReferralLogTable({ data, onRefresh }: { data: string[][]; onRefresh: ()
     setEditValues(values);
   };
 
-  const handleSave = async (referralId: string) => {
+  const handleSave = async (screeningReferralId: string) => {
     setSaving(true);
     try {
       await fetch('/api/referral-log', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ referralId, ...editValues }),
+        body: JSON.stringify({ screeningReferralId, ...editValues }),
       });
       onRefresh();
     } catch (e) {

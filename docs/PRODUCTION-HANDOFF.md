@@ -18,6 +18,7 @@
 
 | Version | Date       | Highlights                                                                                                                |
 |---------|------------|---------------------------------------------------------------------------------------------------------------------------|
+| 0.8.0   | 2026-06-25 | **Rename**: Referral Log column A `referralId` → `screeningReferralId` (disambiguates from `careReferralId` on the Care Referral Log). New rows minted with `SR-` prefix (legacy `REF-` rows still work — lookups are exact-string). **Role-view reshape**: SCH Telehealth View is now tabbed (Screening Referral Log + Care Referral Log, both editable). TB Screening Provider View now shows the editable Screening Referral Log (was read-only Care). TB Care Provider View unchanged. **Search by ID** on both log tables — substring match against column A. |
 | 0.7.0   | 2026-06-25 | **Pediatric pass**: age-bucket selector (Under 5 / 5–14 / 15+) replaces free-text age; 5–14 runs the 8-symptom pass with 2+ Yes threshold; under-5 exits. **Outcome enum on Screening Referral Log**: Pending / Referred / Reached / Lost, plus patientDx, tbRegistrationId, tbRegistrationDate, firstContactDate, firstFollowupDate, lastFollowupDate, remarks. **SLA row colouring** on SCH Telehealth dashboard (12-day / 14-day buckets). **Fix**: silent save-failure for self-referral + exit paths (now uses a centralised useEffect, surfaces errors inline). **Fix**: dashboard mixed-schema counting (legacy v0.2/v0.3 row positions detected by row length). **Fix**: `updateReferralLogFollowUp` column-shift bug that was overwriting `screeningId`. **Sticky-header scroll** on all admin tables. **Follow-up channels placeholder** appended to every completion turn (Phone / Viber / Telegram / Facebook). New `docs/KZ-DISCUSSION-POINTS.md`. |
 | 0.6.0   | 2026-06-25 | Chat header rebrand to "SCH TB Chatbot". Universal mock auth gate (username `123` / password `abc`) on every dashboard. 4 role-based dashboard routes: SCH Admin / SCH Telehealth / TB Screening Provider / TB Care Provider. New `Care Referral Log` sheet tab + API. "Screening Referral Log" label (tab name kept as `Referral Log` underneath). Workflow flowchart in debug panel showing current conversation position. Debug panel layout reshuffle. Translation panel scroll fix. By-destination referral summary on SCH Admin dashboard. Comparison vs old SCH FB bot in `docs/FB-BOT-COMPARISON.md`. |
 | 0.5.0   | 2026-06-25 | Universal Back / Exit / "What does this mean?" buttons across all mid-flow states. Version shown on the prototype banner. |
@@ -286,9 +287,12 @@ SCH-approved auth flow (SSO / OIDC against SCH's identity provider).
 | Route | View name | Data | Permissions |
 |-------|-----------|------|-------------|
 | `/admin`               | SCH Admin View              | All sheets + link to the Google Sheet itself + by-destination referral summary | Full read+edit |
-| `/telehealth`          | SCH Telehealth View         | Screening Referral Log only          | Read + edit follow-up tracking |
-| `/screening-provider`  | TB Screening Provider View  | Care Referral Log only               | Read-only |
+| `/telehealth`          | SCH Telehealth View         | **Screening Referral Log + Care Referral Log** (tabbed) | Read + edit BOTH logs (v0.8) |
+| `/screening-provider`  | TB Screening Provider View  | Screening Referral Log only          | Read + edit (v0.8 — was read-only Care) |
 | `/care-provider`       | TB Care Provider View       | Care Referral Log only               | Read + edit care-provider + status + follow-up + notes |
+
+Both log tables have a **search-by-ID input** at the top — substring
+match against column A (`screeningReferralId` / `careReferralId`).
 
 ## 7. Referral letter — Q17 contract
 
