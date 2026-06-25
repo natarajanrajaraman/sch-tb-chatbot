@@ -41,7 +41,13 @@ export default function P3ChatPanel({ theme, modelId, platformView, systemPrompt
   const [p3ConversationId, setP3ConversationId] = useState(() => `P3-${generateId()}`);
   const [messages, setMessages] = useState<P3Msg[]>([]);
   const [inputText, setInputText] = useState('');
-  const [pendingEscalationPrompt, setPendingEscalationPrompt] = useState<{ careReferralId: string } | null>(null);
+  // P3 escalation referral flow has 2 steps now (v0.9.4):
+  //   1) pick mode (Assisted vs Self)
+  //   2) collect contact info — fields vary by mode
+  type ReferralFlow =
+    | { step: 'choose-mode'; careReferralId: string; level: EscalationLevel }
+    | { step: 'collect-info'; careReferralId: string; mode: 'assisted' | 'self'; level: EscalationLevel };
+  const [pendingEscalationPrompt, setPendingEscalationPrompt] = useState<ReferralFlow | null>(null);
   const [isTyping, setIsTyping] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -182,11 +188,15 @@ export default function P3ChatPanel({ theme, modelId, platformView, systemPrompt
         return next;
       });
 
-      // If escalation triggered AND a careReferralId was minted, prompt for TB case ID (skippable)
+      // If escalation triggered AND a careReferralId was minted, start the
+      // referral flow with the assisted/self choice step.
       if (replyMsg.careReferralId && (replyMsg.escalation === 'immediate' || replyMsg.escalation === 'telehealth')) {
-        // Only prompt once per escalation
         if (!patientTbCaseId) {
-          setPendingEscalationPrompt({ careReferralId: replyMsg.careReferralId });
+          setPendingEscalationPrompt({
+            step: 'choose-mode',
+            careReferralId: replyMsg.careReferralId,
+            level: replyMsg.escalation,
+          });
         }
       }
     } catch (e: unknown) {
@@ -205,22 +215,44 @@ export default function P3ChatPanel({ theme, modelId, platformView, systemPrompt
     sendChatTurn(t);
   };
 
-  // Escalation prompt handler — collects optional TB Case ID + contact info.
-  // PATCHes the Care Referral Log row that was minted by /api/p3/chat, then
-  // appends a clear acknowledgment whose wording depends on whether the
-  // user provided contact info (so the bot doesn't falsely promise a
-  // callback when no contact was actually shared).
-  const handleEscalationSubmit = (caseId: string, contact: string) => {
-    if (!pendingEscalationPrompt) return;
+  // Step 1: user picks Assisted vs Self care referral.
+  const handleReferralModeChoice = (mode: 'assisted' | 'self') => {
+    if (!pendingEscalationPrompt || pendingEscalationPrompt.step !== 'choose-mode') return;
+    const labelMm = mode === 'assisted' ? 'လမ်းညွှန်ပေးမှု ရွေးချယ်ပါသည်' : 'ကိုယ်တိုင် သွားရောက်မည်';
+    const labelEn = mode === 'assisted' ? 'Selected Assisted referral' : 'Selected Self referral';
+    setMessages(prev => [...prev, {
+      id: generateId(),
+      role: 'user',
+      textMm: labelMm,
+      textEn: labelEn,
+      ts: Date.now(),
+    }]);
+    setPendingEscalationPrompt({
+      step: 'collect-info',
+      careReferralId: pendingEscalationPrompt.careReferralId,
+      level: pendingEscalationPrompt.level,
+      mode,
+    });
+  };
+
+  // Step 2: user submits contact info (and optionally TB Case ID / current
+  // provider ID for self mode). PATCHes the Care Referral Log row that was
+  // minted by /api/p3/chat, then appends a clear acknowledgment whose
+  // wording depends on whether the user provided contact info (so the bot
+  // doesn't falsely promise a callback when no contact was actually shared).
+  const handleEscalationSubmit = (caseId: string, contact: string, currentProviderId: string) => {
+    if (!pendingEscalationPrompt || pendingEscalationPrompt.step !== 'collect-info') return;
     const txtCase = caseId.trim();
     const txtContact = contact.trim();
-    const { careReferralId } = pendingEscalationPrompt;
+    const txtProvider = currentProviderId.trim();
+    const { careReferralId, mode } = pendingEscalationPrompt;
     setPendingEscalationPrompt(null);
 
     // Echo the user's submission as a user turn (Mm + En)
     const parts: { mm: string; en: string }[] = [];
     if (txtCase) parts.push({ mm: `တီဘီ Case ID: ${txtCase}`, en: `TB Case ID: ${txtCase}` });
     if (txtContact) parts.push({ mm: `ဆက်သွယ်ရန် အချက်အလက်: ${txtContact}`, en: `Contact: ${txtContact}` });
+    if (txtProvider) parts.push({ mm: `လက်ရှိ TB Provider ID: ${txtProvider}`, en: `Current TB Provider ID: ${txtProvider}` });
     const userMm = parts.length > 0 ? parts.map(p => p.mm).join(' · ') : 'အချက်အလက် မပေးပါ (ကျော်ပါမည်)';
     const userEn = parts.length > 0 ? parts.map(p => p.en).join(' · ') : 'Skipped (no info provided)';
     setMessages(prev => [...prev, {
@@ -232,42 +264,61 @@ export default function P3ChatPanel({ theme, modelId, platformView, systemPrompt
     }]);
 
     // Persist whatever the user shared onto the existing Care Referral Log row.
-    if (txtCase || txtContact) {
-      fetch('/api/care-referral-log', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          careReferralId,
-          ...(txtCase ? { patientTbCaseId: txtCase } : {}),
-          ...(txtContact ? { patientContact: txtContact } : {}),
-        }),
-      }).catch(e => console.error('Care referral PATCH failed', e));
-    }
+    // Always note the mode in the notes field for the dashboard reviewers.
+    fetch('/api/care-referral-log', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        careReferralId,
+        ...(txtCase ? { patientTbCaseId: txtCase } : {}),
+        ...(txtContact ? { patientContact: txtContact } : {}),
+        notes: `referralMode: ${mode}${txtProvider ? ` · currentProviderId: ${txtProvider}` : ''}`,
+      }),
+    }).catch(e => console.error('Care referral PATCH failed', e));
 
-    // Branch the acknowledgment so we don't promise a callback when we
-    // have no way to actually call back.
-    if (txtContact) {
-      const lead = txtCase
-        ? `ကျေးဇူးတင်ပါသည်။ TB Case ID (${txtCase}) နှင့် ဆက်သွယ်ရန် အချက်အလက် (${txtContact})`
-        : `ကျေးဇူးတင်ပါသည်။ သင်ပေးထားသော ဆက်သွယ်ရန် အချက်အလက် (${txtContact})`;
-      const leadEn = txtCase
-        ? `Thank you. Your TB Case ID (${txtCase}) and contact details (${txtContact})`
-        : `Thank you. Your contact details (${txtContact})`;
-      setMessages(prev => [...prev, {
-        id: generateId(),
-        role: 'assistant',
-        textMm: `${lead} ကို "နေ" Tele-Health အဖွဲ့ထံ ပေးပို့ပြီးပါပြီ။ မကြာမီ ဆက်သွယ်ပါမည်။`,
-        textEn: `${leadEn} have been shared with the Sun Tele-Health team. They will reach you shortly.`,
-        ts: Date.now(),
-      }]);
+    // Branch the acknowledgment by referral mode + whether contact was given.
+    if (mode === 'assisted') {
+      if (txtContact) {
+        const lead = txtCase
+          ? `ကျေးဇူးတင်ပါသည်။ TB Case ID (${txtCase}) နှင့် ဆက်သွယ်ရန် အချက်အလက် (${txtContact})`
+          : `ကျေးဇူးတင်ပါသည်။ သင်ပေးထားသော ဆက်သွယ်ရန် အချက်အလက် (${txtContact})`;
+        const leadEn = txtCase
+          ? `Thank you. Your TB Case ID (${txtCase}) and contact details (${txtContact})`
+          : `Thank you. Your contact details (${txtContact})`;
+        setMessages(prev => [...prev, {
+          id: generateId(),
+          role: 'assistant',
+          textMm: `${lead} ကို "နေ" Tele-Health အဖွဲ့ထံ ပေးပို့ပြီးပါပြီ။ မကြာမီ ဆက်သွယ်ပါမည်။`,
+          textEn: `${leadEn} have been shared with the Sun Tele-Health team. They will reach you shortly.`,
+          ts: Date.now(),
+        }]);
+      } else {
+        // Assisted but no contact — they CAN'T call you. Direct user out.
+        setMessages(prev => [...prev, {
+          id: generateId(),
+          role: 'assistant',
+          textMm: 'ကောင်းပါပြီ။ ဆက်သွယ်ရန် အချက်အလက် မပါသဖြင့် "နေ" Tele-Health အဖွဲ့မှ သင့်ထံ တိုက်ရိုက်ဆက်သွယ်နိုင်မည် မဟုတ်ပါ။\n\nကျေးဇူးပြု၍ အောက်ပါ နည်းလမ်းတစ်ခုခုဖြင့် "နေ" Tele-Health အဖွဲ့ကို ကိုယ်တိုင် ဆက်သွယ်ပါ —\nဖုန်း: 09-XXXXXXX\nViber: 09-XXXXXXX\nTelegram: @SCH-TB-XXXX\nFacebook: m.me/sch-tb-XXXX',
+          textEn: 'Understood. Without your contact information, the Sun Tele-Health team will NOT be able to reach you directly.\n\nPlease contact them yourself via one of these channels —\nPhone: 09-XXXXXXX\nViber: 09-XXXXXXX\nTelegram: @SCH-TB-XXXX\nFacebook: m.me/sch-tb-XXXX',
+          ts: Date.now(),
+        }]);
+      }
     } else {
-      // No contact info provided — DO NOT promise a callback. Direct the
-      // user to reach Tele-Health themselves via the follow-up channels.
+      // Self mode — patient is going themselves. Acknowledgment is about
+      // pointing them at the right place, not promising contact.
+      const haveAny = txtCase || txtContact || txtProvider;
+      const stored = haveAny
+        ? '\n\nသင်ပေးထားသော အချက်အလက်များကို မှတ်တမ်းတင်ပြီးပါပြီ — Tele-Health အဖွဲ့သည် လိုအပ်ပါက လေ့လာနိုင်ပါမည်။'
+        : '';
+      const storedEn = haveAny
+        ? '\n\nThe details you shared have been recorded — the Tele-Health team can review them if needed.'
+        : '';
+      const findNewMm = '\n\nသင့်လက်ရှိ ဆေးကုသနေသော Provider ထံ တိုက်ရိုက် သွားပါ။ မသိ/Provider အသစ်ရှာလိုပါက "နေ" Tele-Health အဖွဲ့ကို ဆက်သွယ်ပြီး အကူအညီတောင်းပါ။\n\nဖုန်း: 09-XXXXXXX\nViber: 09-XXXXXXX\nTelegram: @SCH-TB-XXXX\nFacebook: m.me/sch-tb-XXXX';
+      const findNewEn = '\n\nPlease go directly to your current TB Care Provider. If you don\'t know where to go or want to find a new provider, contact the Sun Tele-Health team for help.\n\nPhone: 09-XXXXXXX\nViber: 09-XXXXXXX\nTelegram: @SCH-TB-XXXX\nFacebook: m.me/sch-tb-XXXX';
       setMessages(prev => [...prev, {
         id: generateId(),
         role: 'assistant',
-        textMm: 'ကောင်းပါပြီ။ ဆက်သွယ်ရန် အချက်အလက် မပါသဖြင့် "နေ" Tele-Health အဖွဲ့မှ သင့်ထံ တိုက်ရိုက်ဆက်သွယ်နိုင်မည် မဟုတ်ပါ။\n\nကျေးဇူးပြု၍ အောက်ပါ နည်းလမ်းတစ်ခုခုဖြင့် "နေ" Tele-Health အဖွဲ့ကို ကိုယ်တိုင် ဆက်သွယ်ပါ —\nဖုန်း: 09-XXXXXXX\nViber: 09-XXXXXXX\nTelegram: @SCH-TB-XXXX\nFacebook: m.me/sch-tb-XXXX',
-        textEn: 'Understood. Without your contact information, the Sun Tele-Health team will NOT be able to reach you directly.\n\nPlease contact them yourself via one of these channels —\nPhone: 09-XXXXXXX\nViber: 09-XXXXXXX\nTelegram: @SCH-TB-XXXX\nFacebook: m.me/sch-tb-XXXX',
+        textMm: `သင်သည် ကိုယ်တိုင်သွားရောက်မည်ဖြစ်သည်ဟု ဆိုပါသည်။${stored}${findNewMm}`,
+        textEn: `You have chosen Self referral.${storedEn}${findNewEn}`,
         ts: Date.now(),
       }]);
     }
@@ -287,8 +338,8 @@ export default function P3ChatPanel({ theme, modelId, platformView, systemPrompt
         className="flex items-center gap-3 shadow-md z-10 shrink-0"
         style={{ backgroundColor: theme.headerBg, color: theme.headerText, padding: theme.headerPadding }}
       >
-        <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center text-lg">
-          {theme.avatarIcon}
+        <div className="w-9 h-9 rounded-full bg-white flex items-center justify-center overflow-hidden">
+          <img src="/sch-logo.png" alt="Sun Community Health" className="w-full h-full object-contain" />
         </div>
         <div className="flex-1">
           <div className="font-semibold" style={{ fontSize: theme.fontSize }}>SCH TB Chatbot — Patient Info</div>
@@ -331,11 +382,21 @@ export default function P3ChatPanel({ theme, modelId, platformView, systemPrompt
           </div>
         ))}
 
-        {/* Escalation contact prompt — TB Case ID + Phone/Contact */}
-        {pendingEscalationPrompt && (
+        {/* Step 1: assisted/self choice (v0.9.4) */}
+        {pendingEscalationPrompt?.step === 'choose-mode' && (
+          <ReferralModeChoicePrompt
+            theme={theme}
+            careReferralId={pendingEscalationPrompt.careReferralId}
+            onChoose={handleReferralModeChoice}
+          />
+        )}
+
+        {/* Step 2: collect contact info — fields vary by mode */}
+        {pendingEscalationPrompt?.step === 'collect-info' && (
           <EscalationContactPrompt
             theme={theme}
             careReferralId={pendingEscalationPrompt.careReferralId}
+            mode={pendingEscalationPrompt.mode}
             onSubmit={handleEscalationSubmit}
           />
         )}
@@ -381,15 +442,13 @@ export default function P3ChatPanel({ theme, modelId, platformView, systemPrompt
   );
 }
 
-function EscalationContactPrompt({
-  theme, careReferralId, onSubmit,
+function ReferralModeChoicePrompt({
+  theme, careReferralId, onChoose,
 }: {
   theme: PlatformTheme;
   careReferralId: string;
-  onSubmit: (caseId: string, contact: string) => void;
+  onChoose: (mode: 'assisted' | 'self') => void;
 }) {
-  const [caseId, setCaseId] = useState('');
-  const [contact, setContact] = useState('');
   return (
     <div className="flex justify-start" style={{ marginBottom: theme.messageGap }}>
       <div className="max-w-[90%] w-full">
@@ -400,9 +459,77 @@ function EscalationContactPrompt({
           <div className="whitespace-pre-wrap">
             🩺 careReferralId: <code className="font-mono text-[11px]">{careReferralId}</code>
             <br />
-            <span>ဆက်လက်လုပ်ဆောင်ရန် အောက်ပါ အချက်အလက်များ ပေးပါ — "နေ" Tele-Health အဖွဲ့မှ သင်ထံ ဆက်သွယ်နိုင်ပါမည်။ မပေးလိုပါက ကျော်နိုင်ပါသည်။</span>
+            <span>လမ်းညွှန် အကူအညီ ရယူနိုင်ပါသည် — အောက်ပါ နှစ်ခုထဲက တစ်ခုကို ရွေးချယ်ပါ —</span>
             <br />
-            <span className="text-[11px] opacity-70">To complete this referral, please share the details below so the Sun Tele-Health team can reach you. You can skip both — but then they will not be able to contact you directly.</span>
+            <span className="text-[11px] opacity-70">A referral can be set up two ways — please choose:</span>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <button
+              type="button"
+              onClick={() => onChoose('assisted')}
+              className="text-left px-3 py-2 bg-white border border-blue-300 hover:border-blue-500 rounded text-xs"
+              title="The SCH Tele-Health team will call/message you. You'll be asked for contact info next."
+            >
+              <div className="font-semibold text-blue-900">လမ်းညွှန် အကူအညီ ရယူမည် · Assisted Referral</div>
+              <div className="text-[11px] text-blue-800 opacity-80">"နေ" Tele-Health အဖွဲ့မှ သင့်ထံ ဖုန်း/Viber မှ ဆက်သွယ်ပါမည်</div>
+              <div className="text-[10px] text-blue-700 opacity-60">SCH Tele-Health will reach out to you — needs your contact info.</div>
+            </button>
+            <button
+              type="button"
+              onClick={() => onChoose('self')}
+              className="text-left px-3 py-2 bg-white border border-blue-300 hover:border-blue-500 rounded text-xs"
+              title="You'll be told where to go and reach out yourself."
+            >
+              <div className="font-semibold text-blue-900">ကိုယ်တိုင် သွားရောက်မည် · Self Referral</div>
+              <div className="text-[11px] text-blue-800 opacity-80">ကိုယ်တိုင် ဆေးခန်း/Tele-Health သို့ သွားရောက်/ဆက်သွယ်ပါမည်</div>
+              <div className="text-[10px] text-blue-700 opacity-60">You go yourself — contact + TB Case ID + Provider ID optional.</div>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EscalationContactPrompt({
+  theme, careReferralId, mode, onSubmit,
+}: {
+  theme: PlatformTheme;
+  careReferralId: string;
+  mode: 'assisted' | 'self';
+  onSubmit: (caseId: string, contact: string, currentProviderId: string) => void;
+}) {
+  const [caseId, setCaseId] = useState('');
+  const [contact, setContact] = useState('');
+  const [providerId, setProviderId] = useState('');
+
+  // Mode-dependent copy
+  const headerMm = mode === 'assisted'
+    ? 'လမ်းညွှန် အကူအညီ ရယူရန် အောက်ပါ အချက်အလက်များ ပေးပါ။'
+    : 'ကိုယ်တိုင် သွားရောက်ရန် မှတ်တမ်းတင်ရန် အောက်ပါ အချက်အလက်များ ပေးနိုင်ပါသည် (မဖြစ်မနေ မဟုတ်ပါ)။';
+  const headerEn = mode === 'assisted'
+    ? 'For SCH Tele-Health to reach you, please share —'
+    : 'For our records on your self-referral, you can optionally share —';
+  const submitDisabled = mode === 'assisted'
+    ? !contact.trim()   // assisted MUST have contact info
+    : (!caseId.trim() && !contact.trim() && !providerId.trim());
+
+  return (
+    <div className="flex justify-start" style={{ marginBottom: theme.messageGap }}>
+      <div className="max-w-[90%] w-full">
+        <div
+          className="shadow-sm border-l-4 border-blue-400 bg-blue-50 rounded p-3 space-y-2"
+          style={{ fontSize: theme.fontSize, color: '#1e3a8a' }}
+        >
+          <div className="whitespace-pre-wrap">
+            🩺 careReferralId: <code className="font-mono text-[11px]">{careReferralId}</code>
+            <span className="ml-2 text-[10px] uppercase tracking-wide bg-blue-200 text-blue-900 px-1.5 py-0.5 rounded">
+              {mode === 'assisted' ? 'Assisted' : 'Self'}
+            </span>
+            <br />
+            <span>{headerMm}</span>
+            <br />
+            <span className="text-[11px] opacity-70">{headerEn}</span>
           </div>
 
           <div>
@@ -418,7 +545,7 @@ function EscalationContactPrompt({
 
           <div>
             <label className="block text-[10px] font-medium uppercase tracking-wide mb-0.5 opacity-80">
-              Phone / Viber / Contact (recommended)
+              Phone / Viber / Contact {mode === 'assisted' ? '(required)' : '(optional)'}
             </label>
             <input
               type="text"
@@ -429,22 +556,43 @@ function EscalationContactPrompt({
             />
           </div>
 
+          {mode === 'self' && (
+            <div>
+              <label className="block text-[10px] font-medium uppercase tracking-wide mb-0.5 opacity-80">
+                Current TB Care Provider ID (optional)
+              </label>
+              <input
+                type="text"
+                value={providerId}
+                onChange={e => setProviderId(e.target.value)}
+                placeholder="e.g. SUN-YGN-0042"
+                className="w-full px-2 py-1.5 text-xs border rounded focus:ring-1 focus:ring-blue-400 outline-none"
+              />
+              <div className="mt-1 text-[10px] opacity-70">
+                Don&apos;t know your provider or want a new one?
+                Find-new-provider lookup is coming soon — for now,
+                tap Submit and SCH Tele-Health will help you find one.
+              </div>
+            </div>
+          )}
+
           <div className="flex gap-2 pt-1">
             <button
               type="button"
-              onClick={() => onSubmit(caseId, contact)}
-              disabled={!caseId.trim() && !contact.trim()}
+              onClick={() => onSubmit(caseId, contact, providerId)}
+              disabled={submitDisabled}
               className="px-3 py-1.5 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-40"
+              title={mode === 'assisted' ? 'Contact info is required for SCH Tele-Health to reach you.' : undefined}
             >
               Submit
             </button>
             <button
               type="button"
-              onClick={() => onSubmit('', '')}
+              onClick={() => onSubmit('', '', '')}
               className="px-3 py-1.5 bg-gray-200 text-gray-700 text-xs rounded hover:bg-gray-300"
-              title="Skip both fields"
+              title="Skip all fields. SCH Tele-Health will not be able to reach you directly."
             >
-              Skip both
+              Skip all
             </button>
           </div>
         </div>

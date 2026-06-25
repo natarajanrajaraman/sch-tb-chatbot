@@ -10,6 +10,7 @@ import P3ChatPanel, { P3UsageSnapshot, P3Msg } from '@/components/p3/P3ChatPanel
 import P3CostMeter from '@/components/p3/P3CostMeter';
 import P3DocLinks from '@/components/p3/P3DocLinks';
 import P3SystemPromptEditor from '@/components/p3/P3SystemPromptEditor';
+import P3KbLinks from '@/components/p3/P3KbLinks';
 import { DEFAULT_MODEL_ID } from '@/lib/p3/models';
 import { PlatformType, PLATFORM_THEMES, PLATFORM_ORDER } from '@/data/platformThemes';
 import {
@@ -148,7 +149,7 @@ export default function Home() {
         <button
           onClick={handleRestart}
           className="px-4 py-2 bg-red-600/90 text-white text-xs font-medium rounded-full shadow-lg hover:bg-red-700 transition-colors shrink-0"
-          title="Restart the conversation"
+          title="Wipe the current chat state and start a fresh conversation. P3 conversation ID + token counters also reset."
         >
           ↻ Restart Conversation
         </button>
@@ -159,6 +160,7 @@ export default function Home() {
         onClick={() => setDebugPanelOpen(!debugPanelOpen)}
         className="absolute top-1/2 -translate-y-1/2 right-0 z-30 bg-yellow-400/80 text-yellow-900/70 px-1 py-3 text-[9px] font-bold rounded-l hover:bg-yellow-400 transition-colors"
         style={{ writingMode: 'vertical-rl', right: debugPanelOpen ? '320px' : '0' }}
+        title={debugPanelOpen ? 'Close the debug / tester panel' : 'Open the debug / tester panel (model picker, cost meter, dashboards, KB)'}
       >
         {debugPanelOpen ? 'CLOSE' : 'DEBUG'}
       </button>
@@ -203,6 +205,14 @@ export default function Home() {
                   override={p3SystemPromptOverride}
                   onOverrideChange={setP3SystemPromptOverride}
                 />
+              )}
+
+              {/* P3 KB Links — collapsed by default, sits right below the
+                  system prompt editor as Raj requested. */}
+              {isP3Mode && (
+                <CollapsibleSection title="P3 Knowledge Base Links" defaultOpen={false}>
+                  <P3KbLinks />
+                </CollapsibleSection>
               )}
 
               {/* Platform skin — collapsed by default */}
@@ -264,16 +274,32 @@ export default function Home() {
               {/* Dashboards — expanded by default */}
               <CollapsibleSection title="Dashboards (mock auth)" defaultOpen={true}>
                 <div className="px-3 py-2 space-y-1 bg-gray-800/40">
-                  <a href="/admin" className="block w-full px-2 py-1 bg-gray-700/50 text-gray-200 text-[10px] font-medium rounded hover:bg-gray-700 text-center">
+                  <a
+                    href="/admin"
+                    title="Full read+edit across Sessions, Feedback, Screening Referral Log, Care Referral Log. Link to the underlying Google Sheet."
+                    className="block w-full px-2 py-1 bg-gray-700/50 text-gray-200 text-[10px] font-medium rounded hover:bg-gray-700 text-center"
+                  >
                     SCH Admin View
                   </a>
-                  <a href="/telehealth" className="block w-full px-2 py-1 bg-gray-700/50 text-gray-200 text-[10px] font-medium rounded hover:bg-gray-700 text-center">
+                  <a
+                    href="/telehealth"
+                    title="SCH Tele-Health team's dashboard. Tabbed: Screening Referral Log + Care Referral Log, both editable."
+                    className="block w-full px-2 py-1 bg-gray-700/50 text-gray-200 text-[10px] font-medium rounded hover:bg-gray-700 text-center"
+                  >
                     SCH Telehealth View
                   </a>
-                  <a href="/screening-provider" className="block w-full px-2 py-1 bg-gray-700/50 text-gray-200 text-[10px] font-medium rounded hover:bg-gray-700 text-center">
+                  <a
+                    href="/screening-provider"
+                    title="TB screening providers (CXR, sputum testing). Read+edit Screening Referral Log."
+                    className="block w-full px-2 py-1 bg-gray-700/50 text-gray-200 text-[10px] font-medium rounded hover:bg-gray-700 text-center"
+                  >
                     TB Screening Provider View
                   </a>
-                  <a href="/care-provider" className="block w-full px-2 py-1 bg-gray-700/50 text-gray-200 text-[10px] font-medium rounded hover:bg-gray-700 text-center">
+                  <a
+                    href="/care-provider"
+                    title="TB care providers (treatment centres). Read+edit Care Referral Log."
+                    className="block w-full px-2 py-1 bg-gray-700/50 text-gray-200 text-[10px] font-medium rounded hover:bg-gray-700 text-center"
+                  >
                     TB Care Provider View
                   </a>
                 </div>

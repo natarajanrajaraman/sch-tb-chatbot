@@ -331,8 +331,8 @@ export default function ChatWindow({
         className="flex items-center gap-3 shadow-md z-10"
         style={{ backgroundColor: theme.headerBg, color: theme.headerText, padding: theme.headerPadding }}
       >
-        <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center text-lg">
-          {theme.avatarIcon}
+        <div className="w-9 h-9 rounded-full bg-white flex items-center justify-center overflow-hidden">
+          <img src="/sch-logo.png" alt="Sun Community Health" className="w-full h-full object-contain" />
         </div>
         <div className="flex-1">
           <div className="font-semibold" style={{ fontSize: theme.fontSize }}>SCH TB Chatbot</div>
@@ -361,10 +361,10 @@ export default function ChatWindow({
                 <div className="flex items-end gap-2">
                   {showAvatar && (
                     <div
-                      className="rounded-full bg-gray-300 flex items-center justify-center flex-shrink-0 mb-1"
-                      style={{ width: theme.avatarSize, height: theme.avatarSize, fontSize: `calc(${theme.avatarSize} * 0.5)` }}
+                      className="rounded-full bg-white flex items-center justify-center flex-shrink-0 mb-1 overflow-hidden border border-gray-200"
+                      style={{ width: theme.avatarSize, height: theme.avatarSize }}
                     >
-                      🏥
+                      <img src="/sch-logo.png" alt="SCH" className="w-full h-full object-contain" />
                     </div>
                   )}
                   <div>
@@ -444,10 +444,10 @@ export default function ChatWindow({
             <div className="flex items-end gap-2">
               {showAvatar && (
                 <div
-                  className="rounded-full bg-gray-300 flex items-center justify-center flex-shrink-0 mb-1"
-                  style={{ width: theme.avatarSize, height: theme.avatarSize, fontSize: `calc(${theme.avatarSize} * 0.5)` }}
+                  className="rounded-full bg-white flex items-center justify-center flex-shrink-0 mb-1 overflow-hidden border border-gray-200"
+                  style={{ width: theme.avatarSize, height: theme.avatarSize }}
                 >
-                  🏥
+                  <img src="/sch-logo.png" alt="SCH" className="w-full h-full object-contain" />
                 </div>
               )}
               <div
