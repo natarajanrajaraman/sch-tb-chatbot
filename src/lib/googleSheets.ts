@@ -321,6 +321,17 @@ export async function getAllReferralLogs(): Promise<string[][]> {
   }
 }
 
+// v1.5 — Hard-wipe data rows on the Screening Referral Log (row 1 headers
+// stay). Used by /api/admin/migrate-screening-log to clear test data when
+// the schema shape changes.
+export async function clearScreeningReferralLogDataRows(): Promise<void> {
+  const sheets = getSheets();
+  await sheets.spreadsheets.values.clear({
+    spreadsheetId: SPREADSHEET_ID,
+    range: 'Screening Referral Log!A2:AG10000',
+  });
+}
+
 // ----- Care Referral Log -----
 // New tab introduced in v0.6 for referrals to TB care providers (e.g.
 // initiated during the P3 patient/caregiver conversation). Kept separate from
