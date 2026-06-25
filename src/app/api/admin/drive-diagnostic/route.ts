@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { google } from 'googleapis';
 import { Readable } from 'stream';
 import { getAuth } from '@/lib/googleSheets';
+import { parseDriveFolderId } from '@/lib/driveTranscript';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -26,8 +27,8 @@ export async function GET() {
   const steps: Step[] = [];
 
   // Step 1 — env vars
-  const folderId = process.env.GOOGLE_DRIVE_TRANSCRIPT_FOLDER_ID;
-  if (!folderId) {
+  const rawFolder = process.env.GOOGLE_DRIVE_TRANSCRIPT_FOLDER_ID;
+  if (!rawFolder) {
     steps.push({
       step: 'env',
       ok: false,
@@ -35,7 +36,17 @@ export async function GET() {
     });
     return NextResponse.json({ ok: false, steps }, { status: 200 });
   }
-  steps.push({ step: 'env', ok: true, data: { folderId } });
+  // Tolerate both a bare folder ID and the full Drive URL (we parse it).
+  const folderId = parseDriveFolderId(rawFolder);
+  steps.push({
+    step: 'env',
+    ok: true,
+    data: {
+      raw: rawFolder,
+      parsedFolderId: folderId,
+      note: rawFolder !== folderId ? 'Parsed folder ID from the Drive URL you set.' : undefined,
+    },
+  });
 
   // Step 2 — service account email
   let saEmail = '';

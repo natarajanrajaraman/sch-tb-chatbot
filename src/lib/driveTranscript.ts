@@ -9,14 +9,26 @@ function getDrive() {
   return google.drive({ version: 'v3', auth: getAuth() });
 }
 
+// Accept either a bare folder ID or the full Drive URL — operators
+// reasonably copy-paste the URL straight from the browser, and that
+// works as long as we extract the ID portion.
+export function parseDriveFolderId(raw: string): string {
+  const s = raw.trim();
+  // Match /folders/<id> anywhere in a URL
+  const m = s.match(/\/folders\/([a-zA-Z0-9_-]+)/);
+  if (m) return m[1];
+  // Otherwise assume the operator pasted the ID directly
+  return s;
+}
+
 function getFolderId(): string {
-  const id = process.env.GOOGLE_DRIVE_TRANSCRIPT_FOLDER_ID;
-  if (!id) {
+  const raw = process.env.GOOGLE_DRIVE_TRANSCRIPT_FOLDER_ID;
+  if (!raw) {
     throw new Error(
       'GOOGLE_DRIVE_TRANSCRIPT_FOLDER_ID env var is not set. Set it to the ID of the Drive folder you shared with the service account.'
     );
   }
-  return id;
+  return parseDriveFolderId(raw);
 }
 
 export interface TranscriptSaveResult {

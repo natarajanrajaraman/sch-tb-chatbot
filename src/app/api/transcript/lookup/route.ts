@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { google } from 'googleapis';
 import { getAuth } from '@/lib/googleSheets';
+import { parseDriveFolderId } from '@/lib/driveTranscript';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -16,13 +17,14 @@ export async function GET(request: NextRequest) {
     if (!conversationId) {
       return NextResponse.json({ found: false, error: 'conversationId required' }, { status: 400 });
     }
-    const folderId = process.env.GOOGLE_DRIVE_TRANSCRIPT_FOLDER_ID;
-    if (!folderId) {
+    const rawFolder = process.env.GOOGLE_DRIVE_TRANSCRIPT_FOLDER_ID;
+    if (!rawFolder) {
       return NextResponse.json(
         { found: false, error: 'GOOGLE_DRIVE_TRANSCRIPT_FOLDER_ID not set' },
         { status: 200 }
       );
     }
+    const folderId = parseDriveFolderId(rawFolder);
     const drive = google.drive({ version: 'v3', auth: getAuth() });
     const safeName = `${conversationId}.md`.replace(/'/g, "\\'");
     const resp = await drive.files.list({
