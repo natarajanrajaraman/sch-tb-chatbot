@@ -5,6 +5,10 @@ import ChatWindow from '@/components/ChatWindow';
 import TranslationPanel from '@/components/TranslationPanel';
 import FeedbackPanel from '@/components/FeedbackPanel';
 import WorkflowFlowchart from '@/components/WorkflowFlowchart';
+import P3ChatPanel, { P3UsageSnapshot } from '@/components/p3/P3ChatPanel';
+import P3CostMeter from '@/components/p3/P3CostMeter';
+import P3DocLinks from '@/components/p3/P3DocLinks';
+import { DEFAULT_MODEL_ID } from '@/lib/p3/models';
 import { PlatformType, PLATFORM_THEMES, PLATFORM_ORDER } from '@/data/platformThemes';
 import {
   Message,
@@ -28,6 +32,19 @@ export default function Home() {
   const [session, setSession] = useState<SessionData>(createInitialSession(DEFAULT_PLATFORM));
   const [conversationState, setConversationState] = useState<ConversationState>('LANDING');
   const [mounted, setMounted] = useState(false);
+
+  // P3 (Patient Info chatbot) state — surfaces in debug panel
+  const [p3ModelId, setP3ModelId] = useState<string>(DEFAULT_MODEL_ID);
+  const [p3ResetSignal, setP3ResetSignal] = useState(0);
+  const [p3Usage, setP3Usage] = useState<P3UsageSnapshot>({
+    modelId: DEFAULT_MODEL_ID,
+    totalPromptTokens: 0,
+    totalCompletionTokens: 0,
+    estCostUsd: 0,
+    lastEscalationLevel: 'none',
+    escalationsCount: 0,
+    careReferralIds: [],
+  });
 
   const theme = PLATFORM_THEMES[platform];
 
@@ -76,7 +93,10 @@ export default function Home() {
     setSession(newSession);
     setConversationState('LANDING');
     setMessages([getWelcomeMessage()]);
+    setP3ResetSignal(s => s + 1);
   }, [platform]);
+
+  const isP3Mode = session.landingChoice === '2';
 
   if (!mounted) return null;
 
@@ -93,15 +113,25 @@ export default function Home() {
             height: '100%',
           }}
         >
-          <ChatWindow
-            theme={theme}
-            messages={messages}
-            setMessages={setMessages}
-            session={session}
-            setSession={setSession}
-            conversationState={conversationState}
-            setConversationState={setConversationState}
-          />
+          {isP3Mode ? (
+            <P3ChatPanel
+              theme={theme}
+              modelId={p3ModelId}
+              platformView={platform}
+              onUsageChange={setP3Usage}
+              onResetSignal={p3ResetSignal}
+            />
+          ) : (
+            <ChatWindow
+              theme={theme}
+              messages={messages}
+              setMessages={setMessages}
+              session={session}
+              setSession={setSession}
+              conversationState={conversationState}
+              setConversationState={setConversationState}
+            />
+          )}
         </div>
       </div>
 
@@ -129,6 +159,18 @@ export default function Home() {
 
             {/* Workflow flowchart — current conversation position */}
             <WorkflowFlowchart state={conversationState} session={session} />
+
+            {/* P3 — cost meter + model picker (shown in P3 mode) */}
+            <P3CostMeter
+              modelId={p3ModelId}
+              onModelChange={setP3ModelId}
+              usage={p3Usage}
+              onReset={() => setP3ResetSignal(s => s + 1)}
+              visible={isP3Mode}
+            />
+
+            {/* Docs links — always visible */}
+            <P3DocLinks />
 
             {/* Restart Conversation — own row at top */}
             <div className="px-3 pt-2.5 pb-1 shrink-0">

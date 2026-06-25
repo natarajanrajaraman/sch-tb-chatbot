@@ -11,6 +11,7 @@ const EDITABLE_FIELDS = [
   { key: 'status', label: 'Status', col: 10, options: ['Pending', 'Contacted', 'In Care', 'Closed', 'Lost'] },
   { key: 'followUpDate', label: 'Follow-up Date', col: 11, type: 'date' as const },
   { key: 'notes', label: 'Notes', col: 12 },
+  { key: 'patientTbCaseId', label: 'Patient TB Case ID', col: 13 },
 ];
 
 export default function CareReferralLogTable({
@@ -38,8 +39,12 @@ export default function CareReferralLogTable({
   const headers = data[0] || [];
   const allRows = data.slice(1);
   const q = search.trim().toLowerCase();
+  // Column 0 = careReferralId, column 3 = clientName
   const rows = q
-    ? allRows.filter(r => (r[0] || '').toLowerCase().includes(q))
+    ? allRows.filter(r =>
+        (r[0] || '').toLowerCase().includes(q) ||
+        (r[3] || '').toLowerCase().includes(q)
+      )
     : allRows;
 
   const handleExpand = (rowIdx: number) => {
@@ -84,7 +89,7 @@ export default function CareReferralLogTable({
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search by careReferralId (e.g. CR-...)"
+            placeholder="Search by careReferralId or client name"
             className="px-3 py-1.5 text-xs border rounded-md w-64 focus:ring-1 focus:ring-blue-400 outline-none"
           />
           {q && (

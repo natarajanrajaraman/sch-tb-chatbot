@@ -1,0 +1,105 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { callOpenRouter, P3ChatMessage } from '@/lib/p3/openrouter';
+import { findModel, DEFAULT_MODEL_ID, estimateCostUsd } from '@/lib/p3/models';
+import { getSystemPrompt } from '@/lib/p3/loadDocs';
+import { parseEscalationTag, ruleBasedPreCheck, maxLevel, EscalationLevel } from '@/lib/p3/escalation';
+import { saveCareReferralLog } from '@/lib/googleSheets';
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+interface ChatRequestBody {
+  p3ConversationId: string;
+  modelId?: string;
+  history: { role: 'user' | 'assistant'; content: string }[];
+  userMessage: string;
+  patientTbCaseId?: string;   // optional; if user provided one at the
+                              // escalation TB-case-ID prompt
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json() as ChatRequestBody;
+    const modelId = body.modelId && findModel(body.modelId) ? body.modelId : DEFAULT_MODEL_ID;
+    const sysPrompt = getSystemPrompt();
+
+    // Rule-based pre-check on the user's latest message
+    const preCheck = ruleBasedPreCheck(body.userMessage);
+
+    // Build the OpenRouter call
+    const messages: P3ChatMessage[] = [
+      { role: 'system', content: sysPrompt },
+      ...body.history.map(h => ({ role: h.role, content: h.content })),
+      { role: 'user', content: body.userMessage },
+    ];
+
+    const result = await callOpenRouter(modelId, messages);
+
+    // Strip the LLM's escalation tag
+    const { level: llmLevel, cleanReply } = parseEscalationTag(result.text);
+
+    // Final level = max(LLM, rule-based)
+    const finalLevel: EscalationLevel = maxLevel(preCheck.level, llmLevel);
+
+    // If escalation is immediate or telehealth, log a care referral row.
+    // For nonurgent / none, no row — only the P3 Conversations telemetry
+    // row gets updated downstream by /api/p3/conversation.
+    let careReferralId: string | undefined;
+    if (finalLevel === 'immediate' || finalLevel === 'telehealth') {
+      careReferralId = `CR-${Date.now()}`;
+      const reasonParts: string[] = [];
+      if (preCheck.matches.length > 0) reasonParts.push(`rule: ${preCheck.matches.join('; ')}`);
+      if (llmLevel !== 'none') reasonParts.push(`llm: ${llmLevel}`);
+      reasonParts.push(`level: ${finalLevel}`);
+      try {
+        await saveCareReferralLog({
+          careReferralId,
+          conversationId: body.p3ConversationId,
+          timestamp: new Date().toISOString(),
+          clientName: '',
+          clientAge: '',
+          clientGender: '',
+          careProviderName: 'SCH Tele-Health',
+          careProviderTownship: '',
+          careProviderContact: '',
+          reasonForReferral: reasonParts.join(' | '),
+          status: 'Pending',
+          followUpDate: '',
+          notes: `User message: ${body.userMessage.slice(0, 200)}`,
+          patientTbCaseId: body.patientTbCaseId || '',
+        });
+      } catch (err) {
+        console.error('Care referral log save failed:', err);
+        // Continue — surfacing the chat reply to the user is more
+        // important than the audit log in this code path.
+      }
+    }
+
+    const estCostUsd = estimateCostUsd(modelId, result.promptTokens, result.completionTokens);
+
+    return NextResponse.json({
+      success: true,
+      reply: cleanReply,
+      escalation: {
+        level: finalLevel,
+        llmLevel,
+        ruleLevel: preCheck.level,
+        ruleMatches: preCheck.matches,
+        careReferralId,
+      },
+      tokens: {
+        prompt: result.promptTokens,
+        completion: result.completionTokens,
+      },
+      model: result.model,
+      estCostUsd,
+      finishReason: result.finishReason,
+    });
+  } catch (err) {
+    console.error('P3 chat endpoint error:', err);
+    return NextResponse.json(
+      { success: false, error: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
+  }
+}

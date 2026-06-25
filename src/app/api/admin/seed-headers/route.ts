@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { seedHeaders, SESSIONS_HEADERS, CARE_REFERRAL_LOG_HEADERS, REFERRAL_LOG_HEADERS } from '@/lib/googleSheets';
+import { seedHeaders, SESSIONS_HEADERS, CARE_REFERRAL_LOG_HEADERS, REFERRAL_LOG_HEADERS, P3_CONVERSATIONS_HEADERS } from '@/lib/googleSheets';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -31,6 +31,10 @@ const SPEC = [
   {
     sheetName: 'Care Referral Log',
     headers: CARE_REFERRAL_LOG_HEADERS,
+  },
+  {
+    sheetName: 'P3 Conversations',
+    headers: P3_CONVERSATIONS_HEADERS,
   },
 ];
 

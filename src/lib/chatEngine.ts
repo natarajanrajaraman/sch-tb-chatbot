@@ -8,7 +8,7 @@ import { BOT_MESSAGES } from '@/data/messages';
 import { t } from './textRegistry';
 import { getStates, getDistricts, getTownships } from './locationRegistry';
 
-export const BOT_VERSION = '0.8.0';
+export const BOT_VERSION = '0.9.0';
 
 export type ConversationState =
   | 'LANDING'
@@ -681,16 +681,14 @@ function processUserInputInner(
         };
       }
       if (input === 'landing_2') {
+        // v0.9 — landing choice 2 hands off to the P3 LLM chat panel
+        // (rendered by page.tsx based on session.landingChoice).
+        // The P1 state machine stays at LANDING for the rest of this
+        // session; P3 manages its own message list.
         updatedSession.landingChoice = '2';
-        updatedSession.status = 'completed';
-        const stub = t('msg.p3_stub', BOT_MESSAGES.p3_stub);
-        const chans = t('msg.followup_channels', BOT_MESSAGES.followup_channels);
         return {
-          nextState: 'P3_STUB',
-          botMessage: createBotMessage({
-            mm: stub.mm + '\n\n' + chans.mm,
-            en: stub.en + '\n\n' + chans.en,
-          }, getEndOptions()),
+          nextState: 'LANDING',
+          botMessage: getLandingMessage(),  // unused; page swaps to P3ChatPanel
           updatedSession,
         };
       }

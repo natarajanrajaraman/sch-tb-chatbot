@@ -106,6 +106,9 @@ const STAGES: Stage[] = [
 ];
 
 export default function WorkflowFlowchart({ state, session }: { state: ConversationState; session?: SessionData }) {
+  // P3 mode is its own flow — the screening state machine doesn't apply.
+  const isP3 = session?.landingChoice === '2';
+
   // Pediatric path skips the RF stage — hide it from the flowchart so the
   // user's actual journey is shown.
   const visibleStages = session?.ageGroup === 'pediatric'
@@ -120,6 +123,24 @@ export default function WorkflowFlowchart({ state, session }: { state: Conversat
       : session?.ageGroup === 'under_5'
         ? 'Excluded (under 5)'
         : null;
+
+  if (isP3) {
+    return (
+      <div className="px-3 py-2 border-b border-gray-700/30 bg-gray-900/40 shrink-0">
+        <div className="text-[9px] font-medium text-gray-500 uppercase tracking-wider mb-1.5">
+          Workflow position
+        </div>
+        <div className="flex items-center gap-2 text-[10px] text-yellow-300 font-semibold">
+          <span className="w-3 inline-block text-center">●</span>
+          <span>P3 — Patient info chatbot</span>
+          <span className="ml-auto text-[9px] text-amber-400/80">LLM mode</span>
+        </div>
+        <div className="text-[9px] text-gray-500 mt-1 leading-relaxed">
+          Open-ended LLM conversation. State machine does not apply. See the cost meter below for token usage.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="px-3 py-2 border-b border-gray-700/30 bg-gray-900/40 shrink-0">

@@ -318,6 +318,9 @@ export const CARE_REFERRAL_LOG_HEADERS = [
   'careProviderName', 'careProviderTownship', 'careProviderContact',
   'reasonForReferral',
   'status', 'followUpDate', 'notes',
+  // v0.9 — patient-provided TB case ID, captured ONLY at care-referral
+  // time (with explicit Skip). Never linked across sessions. Optional.
+  'patientTbCaseId',
 ];
 
 export async function saveCareReferralLog(row: Record<string, string>): Promise<void> {
@@ -325,9 +328,74 @@ export async function saveCareReferralLog(row: Record<string, string>): Promise<
   await appendToSheet('Care Referral Log', [ordered]);
 }
 
+// ----- P3 Conversations (v0.9 telemetry) -----
+export const P3_CONVERSATIONS_HEADERS = [
+  'p3ConversationId', 'startedAt', 'lastMessageAt',
+  'model',
+  'userMessageCount', 'totalPromptTokens', 'totalCompletionTokens',
+  'estCostUsd',
+  'lastEscalationLevel',
+  'escalationsCount',
+  'careReferralIds',
+  'platformView',
+  'botVersion',
+];
+
+export interface P3ConversationRow {
+  p3ConversationId: string;
+  startedAt: string;
+  lastMessageAt: string;
+  model: string;
+  userMessageCount: number;
+  totalPromptTokens: number;
+  totalCompletionTokens: number;
+  estCostUsd: number;
+  lastEscalationLevel: string;
+  escalationsCount: number;
+  careReferralIds: string;
+  platformView: string;
+  botVersion: string;
+}
+
+export async function upsertP3Conversation(row: P3ConversationRow): Promise<void> {
+  const allData = await getSheetValues('P3 Conversations', 'A1:M5000').catch(() => []);
+  const headers = allData[0] || P3_CONVERSATIONS_HEADERS;
+  const idx = allData.findIndex((r, i) => i > 0 && r[0] === row.p3ConversationId);
+  const ordered = P3_CONVERSATIONS_HEADERS.map(h => {
+    const v = (row as unknown as Record<string, unknown>)[h];
+    return v === undefined || v === null ? '' : String(v);
+  });
+  if (idx >= 0) {
+    // Update existing row
+    const sheetRow = idx + 1;
+    await updateSheetCells('P3 Conversations', `A${sheetRow}:${columnLetter(headers.length || P3_CONVERSATIONS_HEADERS.length)}${sheetRow}`, [ordered]);
+  } else {
+    await appendToSheet('P3 Conversations', [ordered]);
+  }
+}
+
+function columnLetter(n: number): string {
+  let s = '';
+  let x = n;
+  while (x > 0) {
+    const r = (x - 1) % 26;
+    s = String.fromCharCode(65 + r) + s;
+    x = Math.floor((x - 1) / 26);
+  }
+  return s || 'A';
+}
+
+export async function getAllP3Conversations(): Promise<string[][]> {
+  try {
+    return await getSheetValues('P3 Conversations', 'A1:M5000');
+  } catch {
+    return [];
+  }
+}
+
 export async function getAllCareReferralLogs(): Promise<string[][]> {
   try {
-    return await getSheetValues('Care Referral Log', 'A1:M2000');
+    return await getSheetValues('Care Referral Log', 'A1:N2000');
   } catch {
     return [];
   }
@@ -337,14 +405,14 @@ export async function updateCareReferralLog(
   careReferralId: string,
   patch: Partial<Record<string, string>>
 ): Promise<boolean> {
-  const allData = await getSheetValues('Care Referral Log', 'A1:M2000');
+  const allData = await getSheetValues('Care Referral Log', 'A1:N2000');
   const rowIndex = allData.findIndex(row => row[0] === careReferralId);
   if (rowIndex < 0) return false;
   const sheetRow = rowIndex + 1;
-  // Update G..M cells (careProviderName .. notes)
-  const editableCols = ['careProviderName', 'careProviderTownship', 'careProviderContact', 'reasonForReferral', 'status', 'followUpDate', 'notes'];
+  // Update G..N cells (careProviderName .. patientTbCaseId)
+  const editableCols = ['careProviderName', 'careProviderTownship', 'careProviderContact', 'reasonForReferral', 'status', 'followUpDate', 'notes', 'patientTbCaseId'];
   const values = [editableCols.map(c => patch[c] ?? allData[rowIndex][CARE_REFERRAL_LOG_HEADERS.indexOf(c)] ?? '')];
-  await updateSheetCells('Care Referral Log', `G${sheetRow}:M${sheetRow}`, values);
+  await updateSheetCells('Care Referral Log', `G${sheetRow}:N${sheetRow}`, values);
   return true;
 }
 

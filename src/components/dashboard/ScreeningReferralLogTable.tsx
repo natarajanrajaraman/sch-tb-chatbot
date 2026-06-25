@@ -101,8 +101,12 @@ export default function ScreeningReferralLogTable({
   const headers = data[0] || [];
   const allRows = data.slice(1);
   const q = search.trim().toLowerCase();
+  // Column 0 = screeningReferralId, column 3 = clientName
   const rows = q
-    ? allRows.filter(r => (r[0] || '').toLowerCase().includes(q))
+    ? allRows.filter(r =>
+        (r[0] || '').toLowerCase().includes(q) ||
+        (r[3] || '').toLowerCase().includes(q)
+      )
     : allRows;
 
   // SLA summary counters
@@ -155,7 +159,7 @@ export default function ScreeningReferralLogTable({
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search by screeningReferralId (e.g. SR-..., REF-...)"
+            placeholder="Search by screeningReferralId or client name"
             className="px-3 py-1.5 text-xs border rounded-md w-72 focus:ring-1 focus:ring-blue-400 outline-none"
           />
           {q && (

@@ -75,7 +75,73 @@ with calls.
    placeholders need real values before SCH-facing testing —
    please provide whichever ones SCH has decided to staff.
 
-### 3. (Add new items here as they come up)
+### 3. SCH Tele-Health response-time SLA for P3 escalations
+
+**Status as of v0.9.0**: The P3 chatbot now generates `careReferralId`
++ logs to the Care Referral Log on every `immediate` or `telehealth`
+escalation. The bot tells the user to "contact SCH Tele-Health" but
+gives no commitment about how fast that contact will happen.
+
+**Why this matters**: Both the Medibot WHO pilot and the SCH MH
+post-launch review independently flagged **escalation latency as
+the trust-killer** — wrong-but-fast answers are forgivable, slow
+escalation responses are not.
+
+**Asks of KZ**:
+
+1. What **response-time SLA** does SCH Tele-Health commit to for
+   `immediate` referrals (target: minutes)? For `telehealth`
+   referrals (target: hours)?
+2. What **hours of cover**? If a patient escalates at 11pm,
+   what's the expected response?
+3. **Who staffs each follow-up channel** (Phone / Viber / Telegram /
+   Facebook) — and do all four have the same SLA?
+4. **Out-of-hours protocol**: should the bot tell users explicitly
+   "Tele-Health responds 9-5 SGT; for life-threatening symptoms call
+   ambulance / nearest hospital NOW"?
+
+### 4. Bilingual KB content review capacity (Phase B precondition)
+
+**Status as of v0.9.0**: System prompt is a v1 draft authored by Raj
++ Claude. Drafted in English with light Burmese phrases. **Not
+SCH-clinician reviewed.** Will be replaced with retrieval over WHO
+Module 4 / Myanmar NTP / CDC during Phase B (next major push).
+
+**Asks of KZ**:
+
+1. **Which SCH clinician** owns the bilingual review for both the
+   system prompt AND the Phase B RAG corpus? (Wa Thone covers the
+   Burmese translation; the clinical-correctness check needs an
+   SCH-side clinician.)
+2. **What's the review SLA?** A 50-document corpus reviewed at 2
+   docs/week is a 6-month project. We need to size this realistically
+   before kicking off Phase B.
+3. **Sign-off bar before live patient exposure**: at what threshold
+   of review coverage does SCH consider the bot ready for
+   patient-facing use (vs the current internal review only)?
+
+### 5. Q31/Q33 divergence — careReferralId logging
+
+**Status as of v0.9.0**: Raj overrode KZ's "no log" stance from
+Q31/Q33 after confirming we collect NO patient PII at session
+start. A careReferralId + Care Referral Log row is generated on
+every `immediate`/`telehealth` escalation. No clientName / age /
+gender / phone is captured. Patient TB Case ID is captured ONLY at
+the escalation prompt and ONLY with explicit Skip option.
+
+**Asks of KZ**:
+
+1. Is SCH OK with **anonymous escalation audit logs** that carry no
+   identifiable patient info beyond the optional TB Case ID?
+2. **Who has access** to the Care Referral Log? Per the v0.8 role
+   matrix: SCH Telehealth View (read+edit BOTH logs), TB Care
+   Provider View (read+edit Care log only), SCH Admin View (all). Is
+   this the right access control for production?
+3. **Retention policy**: how long should these audit rows persist?
+   Per the SCH MH lit review, default = 24 months post-treatment-
+   completion or shorter per WHO guidance.
+
+### 6. (Add new items here as they come up)
 
 ---
 
