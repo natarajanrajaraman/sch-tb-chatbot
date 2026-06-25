@@ -1,113 +1,277 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { downloadCSV } from './DataTable';
 import TranscriptLink from './TranscriptLink';
+
+// v1.5 — Per-role editability + radio inputs + 6-date split.
+// The v0.7 single-enum `outcome` column is retired (see USER-GUIDE §4.8
+// "Patient journey — conceptual model"); per-stage Self-Check Outcome
+// rollup ships in v1.6.
+
+export type UserRole = 'admin' | 'telehealth' | 'screening-provider' | 'care-provider';
+
+type FieldType = 'number' | 'radio-yesno' | 'radio' | 'date' | 'text' | 'textarea';
 
 interface FieldConfig {
   key: string;
   label: string;
-  col: number;     // 0-indexed position in the row array (matches REFERRAL_LOG_HEADERS)
-  type: 'number' | 'yesno' | 'select' | 'date' | 'text';
-  options?: string[];
+  col: number; // 0-indexed position in the row array — must match REFERRAL_LOG_HEADERS
+  type: FieldType;
+  options?: { value: string; label: string }[];
+  // Roles that can edit this field. 'all' = every role.
+  editableBy: UserRole[] | 'all';
+  // Role that considers this field "their" responsibility — shows the
+  // "Your action" highlight when that role is signed in.
+  primaryFor?: UserRole;
+  // For date fields: the role that gets a "Today" auto-fill button +
+  // gentle prompt to stamp the date as today.
+  autoStampFor?: UserRole;
+  // Conditional visibility — receives current edit values; returns false to
+  // hide the field. Used for the Patient Dx → TB Registration gating.
+  visibleIf?: (values: Record<string, string>) => boolean;
 }
 
-const FOLLOW_UP_FIELDS: FieldConfig[] = [
-  // Existing follow-up tracking (cols M-T = indices 12-19)
-  { key: 'contactAttempts',          label: 'Contact Attempts',          type: 'number', col: 12 },
-  { key: 'clientContacted',          label: 'Client Contacted',          type: 'yesno',  col: 13 },
-  { key: 'referralGivenByTelehealth',label: 'Referral Given by Telehealth', type: 'yesno', col: 14 },
-  { key: 'arrivedAtCenter',          label: 'Arrived at Centre',         type: 'yesno',  col: 15 },
-  { key: 'cxrCompleted',             label: 'CXR Completed',             type: 'yesno',  col: 16 },
-  { key: 'cxrResult',                label: 'CXR Result',                type: 'select', col: 17, options: ['', '+ve', '-ve', 'Indeterminate'] },
-  { key: 'xpertCompleted',           label: 'Xpert MTB/RIF Completed',   type: 'yesno',  col: 18 },
-  { key: 'xpertResult',              label: 'Xpert MTB/RIF Result',      type: 'select', col: 19, options: ['', 'T', 'TT', 'RR', 'N', 'TI', 'I'] },
+interface FieldGroup {
+  title: string;
+  description: string;
+  fields: string[]; // keys
+}
 
-  // v0.7 — old SCH FB bot's outcome / SLA / dx model (cols U-AB = indices 20-27)
-  { key: 'outcome',           label: 'Outcome',              type: 'select', col: 20, options: ['', 'Pending', 'Referred', 'Reached', 'Lost'] },
-  { key: 'patientDx',         label: 'Patient Dx',           type: 'select', col: 21, options: ['', 'TB', 'Non-TB'] },
-  { key: 'tbRegistrationId',  label: 'TB Registration ID',   type: 'text',   col: 22 },
-  { key: 'tbRegistrationDate',label: 'TB Registration Date', type: 'date',   col: 23 },
-  { key: 'firstContactDate',  label: 'First Contact Date',   type: 'date',   col: 24 },
-  { key: 'firstFollowupDate', label: '1st Follow-up Date',   type: 'date',   col: 25 },
-  { key: 'lastFollowupDate',  label: 'Last Follow-up Date',  type: 'date',   col: 26 },
-  { key: 'remarks',           label: 'Remarks',              type: 'text',   col: 27 },
+const FIELDS: FieldConfig[] = [
+  // Tele-Health group — cols M-O + the 2 Tele-Health dates
+  {
+    key: 'contactAttempts', label: 'Contact Attempts', col: 12,
+    type: 'number',
+    editableBy: ['admin', 'telehealth'],
+    primaryFor: 'telehealth',
+  },
+  {
+    key: 'clientContacted', label: 'Client Contacted', col: 13,
+    type: 'radio-yesno',
+    editableBy: ['admin', 'telehealth'],
+    primaryFor: 'telehealth',
+  },
+  {
+    key: 'referralGivenByTelehealth', label: 'Referral Given by Tele-Health', col: 14,
+    type: 'radio-yesno',
+    editableBy: ['admin', 'telehealth'],
+    primaryFor: 'telehealth',
+  },
+  {
+    key: 'firstContactTelehealthDate', label: 'First Contact with Tele-Health', col: 23,
+    type: 'date',
+    editableBy: ['admin', 'telehealth'],
+    autoStampFor: 'telehealth',
+  },
+  {
+    key: 'lastContactTelehealthDate', label: 'Last Contact with Tele-Health', col: 24,
+    type: 'date',
+    editableBy: ['admin', 'telehealth'],
+    autoStampFor: 'telehealth',
+  },
+
+  // Screening Provider group — arrived/CXR/Xpert + the 2 SP dates
+  {
+    key: 'firstContactScreeningProviderDate', label: 'First Contact with TB Screening Provider', col: 25,
+    type: 'date',
+    editableBy: ['admin', 'telehealth', 'screening-provider'],
+    autoStampFor: 'screening-provider',
+  },
+  {
+    key: 'lastContactScreeningProviderDate', label: 'Last Contact with TB Screening Provider', col: 26,
+    type: 'date',
+    editableBy: ['admin', 'telehealth', 'screening-provider'],
+    autoStampFor: 'screening-provider',
+  },
+  {
+    key: 'arrivedAtCenter', label: 'Arrived at Screening Centre', col: 15,
+    type: 'radio-yesno',
+    editableBy: ['admin', 'telehealth', 'screening-provider'],
+    primaryFor: 'screening-provider',
+  },
+  {
+    key: 'cxrCompleted', label: 'CXR Completed', col: 16,
+    type: 'radio-yesno',
+    editableBy: ['admin', 'telehealth', 'screening-provider'],
+    primaryFor: 'screening-provider',
+  },
+  {
+    key: 'cxrResult', label: 'CXR Result', col: 17,
+    type: 'radio',
+    options: [
+      { value: '+ve', label: '+ve' },
+      { value: '-ve', label: '-ve' },
+      { value: 'Indeterminate', label: 'Indeterminate' },
+    ],
+    editableBy: ['admin', 'telehealth', 'screening-provider'],
+    primaryFor: 'screening-provider',
+  },
+  {
+    key: 'xpertCompleted', label: 'Xpert MTB/RIF Completed', col: 18,
+    type: 'radio-yesno',
+    editableBy: ['admin', 'telehealth', 'screening-provider'],
+    primaryFor: 'screening-provider',
+  },
+  {
+    key: 'xpertResult', label: 'Xpert MTB/RIF Result', col: 19,
+    type: 'radio',
+    options: [
+      { value: 'T', label: 'T (TB detected)' },
+      { value: 'TT', label: 'TT (trace)' },
+      { value: 'RR', label: 'RR (rif-resistant)' },
+      { value: 'N', label: 'N (negative)' },
+      { value: 'TI', label: 'TI (invalid)' },
+      { value: 'I', label: 'I (indeterminate)' },
+    ],
+    editableBy: ['admin', 'telehealth', 'screening-provider'],
+    primaryFor: 'screening-provider',
+  },
+
+  // Final diagnosis group — anyone can mark
+  {
+    key: 'patientDx', label: 'Patient Dx', col: 20,
+    type: 'radio',
+    options: [
+      { value: 'Confirmed TB +ve', label: 'Confirmed TB +ve' },
+      { value: 'Confirmed TB -ve', label: 'Confirmed TB -ve' },
+      { value: 'Pending', label: 'Pending' },
+    ],
+    editableBy: 'all',
+  },
+  {
+    key: 'tbRegistrationId', label: 'TB Registration ID', col: 21,
+    type: 'text',
+    editableBy: 'all',
+    visibleIf: v => v.patientDx === 'Confirmed TB +ve',
+  },
+  {
+    key: 'tbRegistrationDate', label: 'TB Registration Date', col: 22,
+    type: 'date',
+    editableBy: 'all',
+    visibleIf: v => v.patientDx === 'Confirmed TB +ve',
+  },
+
+  // Care Provider group
+  {
+    key: 'firstContactCareProviderDate', label: 'First Contact with TB Care Provider', col: 27,
+    type: 'date',
+    editableBy: ['admin', 'telehealth', 'care-provider'],
+    autoStampFor: 'care-provider',
+  },
+  {
+    key: 'lastContactCareProviderDate', label: 'Last Contact with TB Care Provider', col: 28,
+    type: 'date',
+    editableBy: ['admin', 'telehealth', 'care-provider'],
+    autoStampFor: 'care-provider',
+  },
+
+  // Notes — anyone
+  {
+    key: 'remarks', label: 'Remarks', col: 32,
+    type: 'textarea',
+    editableBy: 'all',
+  },
 ];
 
-// SLA-status helper — encodes the old SCH bot's 2-week / 2-attempt rule:
-// 1st follow-up due ~Day 2-3 after first contact; last follow-up ~Day 14;
-// after that, the user should be marked Lost if they haven't reached a site.
-type SlaStatus = 'unset' | 'fresh' | 'first_followup_due' | 'last_followup_due' | 'sla_breach' | 'resolved' | 'lost';
+const FIELDS_BY_KEY = Object.fromEntries(FIELDS.map(f => [f.key, f]));
 
-function slaStatus(row: string[]): { status: SlaStatus; daysSinceContact: number | null; label: string } {
+const GROUPS: FieldGroup[] = [
+  {
+    title: 'Tele-Health contact',
+    description: 'Filled by the SCH Tele-Health team after they contact the patient.',
+    fields: ['contactAttempts', 'clientContacted', 'referralGivenByTelehealth', 'firstContactTelehealthDate', 'lastContactTelehealthDate'],
+  },
+  {
+    title: 'TB Screening Provider — visit and tests',
+    description: 'Filled by the TB Screening Provider after the patient arrives. Tele-Health may back-fill on their behalf.',
+    fields: ['firstContactScreeningProviderDate', 'lastContactScreeningProviderDate', 'arrivedAtCenter', 'cxrCompleted', 'cxrResult', 'xpertCompleted', 'xpertResult'],
+  },
+  {
+    title: 'Final diagnosis',
+    description: 'Marked by anyone reviewing the case once test results are in. TB Registration ID + Date only apply when Dx = Confirmed TB +ve.',
+    fields: ['patientDx', 'tbRegistrationId', 'tbRegistrationDate'],
+  },
+  {
+    title: 'TB Care Provider — follow-up',
+    description: 'Filled by the TB Care Provider after the patient enters care. Tele-Health may back-fill on their behalf.',
+    fields: ['firstContactCareProviderDate', 'lastContactCareProviderDate'],
+  },
+  {
+    title: 'Notes',
+    description: 'Free-text notes visible to all roles.',
+    fields: ['remarks'],
+  },
+];
+
+type StatusBucket = 'unset' | 'engaged' | 'overdue' | 'resolved' | 'abandoned';
+
+const STATUS_LABEL: Record<StatusBucket, string> = {
+  unset: 'No Tele-Health contact yet',
+  engaged: 'Within 7-day window',
+  overdue: 'Overdue (>7 days)',
+  resolved: 'Resolved',
+  abandoned: 'Abandoned',
+};
+
+const STATUS_BG: Record<StatusBucket, string> = {
+  unset: 'bg-gray-200 text-gray-700',
+  engaged: 'bg-blue-100 text-blue-800',
+  overdue: 'bg-red-100 text-red-800 font-semibold',
+  resolved: 'bg-emerald-100 text-emerald-800',
+  abandoned: 'bg-gray-100 text-gray-600',
+};
+
+// v1.5 placeholder for the v1.6 journey-state computation. Reads from the
+// new fields so the badge doesn't break, but the per-stage rollup is not
+// here yet.
+function statusFor(row: string[]): { bucket: StatusBucket; label: string } {
   const contactAttempts = parseInt((row[12] || '0').trim(), 10) || 0;
   const clientContacted = (row[13] || '').trim();
-  const arrivedAtCenter = (row[15] || '').trim();
-  const outcome = (row[20] || '').trim();
-  const firstContact = (row[24] || '').trim();
-  const timestamp = (row[2] || '').trim(); // referral row created at
+  const arrived = (row[15] || '').trim();
+  const patientDx = (row[20] || '').trim();
+  const firstContactTelehealth = (row[23] || '').trim();
+  const removalReason = (row[29] || '').trim();
+  const timestamp = (row[2] || '').trim();
 
-  if (outcome === 'Lost') return { status: 'lost', daysSinceContact: null, label: 'Lost' };
-  if (outcome === 'Reached' || outcome === 'TB' || outcome === 'Non-TB' || arrivedAtCenter === 'Yes') {
-    return { status: 'resolved', daysSinceContact: null, label: 'Resolved' };
+  if (removalReason) return { bucket: 'abandoned', label: `Abandoned · ${removalReason}` };
+  if (arrived === 'Yes' || patientDx === 'Confirmed TB +ve' || patientDx === 'Confirmed TB -ve') {
+    return { bucket: 'resolved', label: patientDx || 'Reached centre' };
   }
-
-  // Has the patient been contacted yet? Check multiple signals — firstContactDate
-  // is the canonical one, but contactAttempts > 0 or clientContacted='Yes' also
-  // mean the telehealth team has engaged the patient (just hasn't backfilled
-  // the explicit date field).
-  const hasBeenContacted = !!firstContact || contactAttempts > 0 || clientContacted === 'Yes';
-
-  if (!hasBeenContacted) {
-    return { status: 'unset', daysSinceContact: null, label: 'No 1st contact yet' };
-  }
-
-  // Use firstContactDate if set, else fall back to the referral row's timestamp
-  // so the SLA clock isn't blocked just because the date field is empty.
-  const startStr = firstContact || timestamp;
+  const engaged = !!firstContactTelehealth || contactAttempts > 0 || clientContacted === 'Yes';
+  if (!engaged) return { bucket: 'unset', label: STATUS_LABEL.unset };
+  const startStr = firstContactTelehealth || timestamp;
   const start = new Date(startStr);
-  if (isNaN(start.getTime())) {
-    // Has contact signals but no parseable date — bucket as fresh.
-    return { status: 'fresh', daysSinceContact: 0, label: 'Contacted (no date)' };
-  }
-  const days = Math.floor((Date.now() - start.getTime()) / (1000 * 60 * 60 * 24));
-  const dateSource = firstContact ? '' : ' (from timestamp)';
-  if (days < 2) return { status: 'fresh', daysSinceContact: days, label: `${days}d — within window${dateSource}` };
-  if (days < 12) return { status: 'first_followup_due', daysSinceContact: days, label: `${days}d — 1st FU due${dateSource}` };
-  if (days < 14) return { status: 'last_followup_due', daysSinceContact: days, label: `${days}d — last FU due${dateSource}` };
-  return { status: 'sla_breach', daysSinceContact: days, label: `${days}d — past 2-week SLA${dateSource}` };
+  if (isNaN(start.getTime())) return { bucket: 'engaged', label: 'Engaged (no date)' };
+  const days = Math.floor((Date.now() - start.getTime()) / 86_400_000);
+  if (days <= 7) return { bucket: 'engaged', label: `${days}d engaged` };
+  return { bucket: 'overdue', label: `${days}d — overdue` };
 }
 
-const SLA_ROW_BG: Record<SlaStatus, string> = {
-  unset: '',
-  fresh: '',
-  first_followup_due: 'bg-amber-50',
-  last_followup_due: 'bg-orange-50',
-  sla_breach: 'bg-red-50',
-  resolved: 'bg-emerald-50',
-  lost: 'bg-gray-100',
-};
+function todayISO(): string {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
 
-const SLA_BADGE_COLOR: Record<SlaStatus, string> = {
-  unset: 'bg-gray-200 text-gray-700',
-  fresh: 'bg-blue-100 text-blue-800',
-  first_followup_due: 'bg-amber-100 text-amber-800',
-  last_followup_due: 'bg-orange-100 text-orange-800',
-  sla_breach: 'bg-red-100 text-red-800 font-semibold',
-  resolved: 'bg-emerald-100 text-emerald-800',
-  lost: 'bg-gray-200 text-gray-600',
-};
+function isEditableBy(field: FieldConfig, role: UserRole): boolean {
+  return field.editableBy === 'all' || field.editableBy.includes(role);
+}
 
 export default function ScreeningReferralLogTable({
   data,
   onRefresh,
   editable = true,
+  userRole = 'admin',
   expandRecordId,
   onExpandHandled,
 }: {
   data: string[][];
   onRefresh: () => void;
   editable?: boolean;
+  userRole?: UserRole;
   expandRecordId?: string | null;
   onExpandHandled?: () => void;
 }) {
@@ -117,15 +281,10 @@ export default function ScreeningReferralLogTable({
   const [search, setSearch] = useState('');
   const expandedRowRef = useRef<HTMLTableRowElement | null>(null);
 
-  if (data.length === 0) {
-    return <div className="text-center py-12 text-gray-400">No screening referral log data yet.</div>;
-  }
-
   const headers = data[0] || [];
-  const allRows = data.slice(1);
+  const allRows = useMemo(() => data.slice(1), [data]);
 
   // Auto-expand a record when the parent (Dashboard click) sets expandRecordId.
-  // Clears the parent's flag once handled so subsequent manual collapses stick.
   useEffect(() => {
     if (!expandRecordId) return;
     const idx = allRows.findIndex(r => r[0] === expandRecordId);
@@ -133,9 +292,8 @@ export default function ScreeningReferralLogTable({
       setExpandedRow(idx);
       const row = allRows[idx];
       const values: Record<string, string> = {};
-      FOLLOW_UP_FIELDS.forEach(f => { values[f.key] = row[f.col] || ''; });
+      FIELDS.forEach(f => { values[f.key] = row[f.col] || ''; });
       setEditValues(values);
-      // Scroll into view after the row paints
       setTimeout(() => {
         expandedRowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }, 50);
@@ -143,8 +301,11 @@ export default function ScreeningReferralLogTable({
     if (onExpandHandled) onExpandHandled();
   }, [expandRecordId, allRows, onExpandHandled]);
 
+  if (data.length === 0) {
+    return <div className="text-center py-12 text-gray-400">No screening referral log data yet.</div>;
+  }
+
   const q = search.trim().toLowerCase();
-  // Column 0 = screeningReferralId, column 3 = clientName
   const rows = q
     ? allRows.filter(r =>
         (r[0] || '').toLowerCase().includes(q) ||
@@ -152,12 +313,12 @@ export default function ScreeningReferralLogTable({
       )
     : allRows;
 
-  // SLA summary counters
-  const slaCounts = rows.reduce((acc, r) => {
-    const s = slaStatus(r).status;
+  // Counters for the status banner
+  const statusCounts = rows.reduce((acc, r) => {
+    const s = statusFor(r).bucket;
     acc[s] = (acc[s] || 0) + 1;
     return acc;
-  }, {} as Record<SlaStatus, number>);
+  }, {} as Record<StatusBucket, number>);
 
   const handleExpand = (rowIdx: number) => {
     if (!editable) return;
@@ -168,9 +329,7 @@ export default function ScreeningReferralLogTable({
     setExpandedRow(rowIdx);
     const row = rows[rowIdx];
     const values: Record<string, string> = {};
-    FOLLOW_UP_FIELDS.forEach(f => {
-      values[f.key] = row[f.col] || '';
-    });
+    FIELDS.forEach(f => { values[f.key] = row[f.col] || ''; });
     setEditValues(values);
   };
 
@@ -190,7 +349,6 @@ export default function ScreeningReferralLogTable({
     setExpandedRow(null);
   };
 
-  // Visible headers — we add the SLA column to the end
   return (
     <div>
       <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
@@ -223,28 +381,30 @@ export default function ScreeningReferralLogTable({
         </div>
       </div>
 
-      {/* SLA banner — encodes the 2-week / 2-attempt follow-up rule */}
+      {/* v1.5 status banner — placeholder until the v1.6 Self-Check Outcome
+          journey-state rollup ships. SLA threshold = 7 days per stage
+          (pending SCH confirmation). */}
       <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px]">
-        <span className="text-gray-600 font-medium">SLA buckets:</span>
-        <span className={`px-2 py-0.5 rounded ${SLA_BADGE_COLOR.unset}`}>No 1st contact: {slaCounts.unset || 0}</span>
-        <span className={`px-2 py-0.5 rounded ${SLA_BADGE_COLOR.fresh}`}>Within window: {slaCounts.fresh || 0}</span>
-        <span className={`px-2 py-0.5 rounded ${SLA_BADGE_COLOR.first_followup_due}`}>1st FU due: {slaCounts.first_followup_due || 0}</span>
-        <span className={`px-2 py-0.5 rounded ${SLA_BADGE_COLOR.last_followup_due}`}>Last FU due: {slaCounts.last_followup_due || 0}</span>
-        <span className={`px-2 py-0.5 rounded ${SLA_BADGE_COLOR.sla_breach}`}>Past 2-week SLA: {slaCounts.sla_breach || 0}</span>
-        <span className={`px-2 py-0.5 rounded ${SLA_BADGE_COLOR.resolved}`}>Resolved: {slaCounts.resolved || 0}</span>
-        <span className={`px-2 py-0.5 rounded ${SLA_BADGE_COLOR.lost}`}>Lost: {slaCounts.lost || 0}</span>
+        <span className="text-gray-600 font-medium">Status (7-day SLA):</span>
+        {(['unset', 'engaged', 'overdue', 'resolved', 'abandoned'] as StatusBucket[]).map(b => (
+          <span key={b} className={`px-2 py-0.5 rounded ${STATUS_BG[b]}`}>
+            {STATUS_LABEL[b]}: {statusCounts[b] || 0}
+          </span>
+        ))}
+        <span className="text-gray-400 italic">· per-stage rollup coming in v1.6</span>
       </div>
 
       {editable && (
         <div className="text-xs text-gray-500 mb-2">
-          Click a row to expand and edit follow-up tracking, outcome, and final diagnosis.
+          Signed in as <span className="font-semibold capitalize">{userRole.replace('-', ' ')}</span>.
+          Click a row to expand. Fields highlighted in <span className="px-1 rounded bg-amber-100 text-amber-800">amber</span> are your team&rsquo;s responsibility.
         </div>
       )}
       <div className="bg-white rounded-lg shadow-sm overflow-x-auto overflow-y-auto" style={{ maxHeight: '70vh' }}>
         <table className="w-full text-xs">
           <thead className="sticky top-0 z-10 bg-gray-50 shadow-sm">
             <tr className="border-b">
-              <th className="px-3 py-2.5 text-left font-semibold text-gray-600 whitespace-nowrap">SLA</th>
+              <th className="px-3 py-2.5 text-left font-semibold text-gray-600 whitespace-nowrap">Status</th>
               <th className="px-3 py-2.5 text-left font-semibold text-gray-600 whitespace-nowrap">Transcript</th>
               {headers.map((h, i) => (
                 <th key={i} className="px-3 py-2.5 text-left font-semibold text-gray-600 whitespace-nowrap">{h}</th>
@@ -253,8 +413,7 @@ export default function ScreeningReferralLogTable({
           </thead>
           <tbody>
             {rows.map((row, i) => {
-              const sla = slaStatus(row);
-              const rowBg = SLA_ROW_BG[sla.status];
+              const status = statusFor(row);
               return (
                 <ScreeningReferralRow
                   key={i}
@@ -262,15 +421,15 @@ export default function ScreeningReferralLogTable({
                   headers={headers}
                   isExpanded={expandedRow === i}
                   editable={editable}
+                  userRole={userRole}
                   editValues={editValues}
                   setEditValues={setEditValues}
                   onExpand={() => handleExpand(i)}
                   onSave={() => handleSave(row[0])}
                   onCancel={() => setExpandedRow(null)}
                   saving={saving}
-                  slaLabel={sla.label}
-                  slaBadge={SLA_BADGE_COLOR[sla.status]}
-                  rowBg={rowBg}
+                  statusLabel={status.label}
+                  statusBadge={STATUS_BG[status.bucket]}
                   rowRef={expandedRow === i ? expandedRowRef : undefined}
                 />
               );
@@ -283,22 +442,22 @@ export default function ScreeningReferralLogTable({
 }
 
 function ScreeningReferralRow({
-  row, headers, isExpanded, editable, editValues, setEditValues, onExpand, onSave, onCancel, saving,
-  slaLabel, slaBadge, rowBg, rowRef,
+  row, headers, isExpanded, editable, userRole, editValues, setEditValues,
+  onExpand, onSave, onCancel, saving, statusLabel, statusBadge, rowRef,
 }: {
   row: string[];
   headers: string[];
   isExpanded: boolean;
   editable: boolean;
+  userRole: UserRole;
   editValues: Record<string, string>;
   setEditValues: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   onExpand: () => void;
   onSave: () => void;
   onCancel: () => void;
   saving: boolean;
-  slaLabel: string;
-  slaBadge: string;
-  rowBg: string;
+  statusLabel: string;
+  statusBadge: string;
   rowRef?: React.Ref<HTMLTableRowElement>;
 }) {
   return (
@@ -306,13 +465,12 @@ function ScreeningReferralRow({
       <tr
         ref={rowRef}
         onClick={onExpand}
-        className={`border-b transition-colors ${editable ? 'cursor-pointer' : ''} ${isExpanded ? 'bg-blue-50' : `${rowBg} hover:bg-gray-50`}`}
+        className={`border-b transition-colors ${editable ? 'cursor-pointer' : ''} ${isExpanded ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
       >
         <td className="px-3 py-2 whitespace-nowrap">
-          <span className={`px-2 py-0.5 rounded text-[10px] ${slaBadge}`}>{slaLabel}</span>
+          <span className={`px-2 py-0.5 rounded text-[10px] ${statusBadge}`}>{statusLabel}</span>
         </td>
         <td className="px-3 py-2 whitespace-nowrap" onClick={e => e.stopPropagation()}>
-          {/* Column B = conversationId in REFERRAL_LOG_HEADERS */}
           <TranscriptLink conversationId={row[1] || ''} />
         </td>
         {headers.map((_, j) => (
@@ -322,61 +480,23 @@ function ScreeningReferralRow({
       {isExpanded && (
         <tr>
           <td colSpan={headers.length + 2} className="bg-blue-50/50 px-6 py-4">
-            <div className="text-sm font-semibold text-gray-700 mb-3">Follow-up & Outcome — {row[0]}</div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {FOLLOW_UP_FIELDS.map(field => (
-                <div key={field.key} className={field.key === 'remarks' ? 'md:col-span-4' : ''}>
-                  <label className="block text-[10px] font-medium text-gray-500 uppercase mb-1">{field.label}</label>
-                  {field.type === 'number' && (
-                    <input
-                      type="number"
-                      min="0"
-                      value={editValues[field.key] || ''}
-                      onChange={e => setEditValues(prev => ({ ...prev, [field.key]: e.target.value }))}
-                      className="w-full px-2 py-1.5 text-xs border rounded focus:ring-1 focus:ring-blue-400 outline-none"
-                    />
-                  )}
-                  {field.type === 'yesno' && (
-                    <select
-                      value={editValues[field.key] || ''}
-                      onChange={e => setEditValues(prev => ({ ...prev, [field.key]: e.target.value }))}
-                      className="w-full px-2 py-1.5 text-xs border rounded focus:ring-1 focus:ring-blue-400 outline-none"
-                    >
-                      <option value="">—</option>
-                      <option value="Yes">Yes</option>
-                      <option value="No">No</option>
-                    </select>
-                  )}
-                  {field.type === 'select' && (
-                    <select
-                      value={editValues[field.key] || ''}
-                      onChange={e => setEditValues(prev => ({ ...prev, [field.key]: e.target.value }))}
-                      className="w-full px-2 py-1.5 text-xs border rounded focus:ring-1 focus:ring-blue-400 outline-none"
-                    >
-                      {field.options!.map(opt => (
-                        <option key={opt} value={opt}>{opt || '—'}</option>
-                      ))}
-                    </select>
-                  )}
-                  {field.type === 'date' && (
-                    <input
-                      type="date"
-                      value={editValues[field.key] || ''}
-                      onChange={e => setEditValues(prev => ({ ...prev, [field.key]: e.target.value }))}
-                      className="w-full px-2 py-1.5 text-xs border rounded focus:ring-1 focus:ring-blue-400 outline-none"
-                    />
-                  )}
-                  {field.type === 'text' && (
-                    <input
-                      type="text"
-                      value={editValues[field.key] || ''}
-                      onChange={e => setEditValues(prev => ({ ...prev, [field.key]: e.target.value }))}
-                      className="w-full px-2 py-1.5 text-xs border rounded focus:ring-1 focus:ring-blue-400 outline-none"
-                    />
-                  )}
-                </div>
-              ))}
+            <div className="flex items-baseline justify-between mb-3 gap-3 flex-wrap">
+              <div className="text-sm font-semibold text-gray-700">Edit record — {row[0]}</div>
+              <div className="text-[11px] text-gray-500">
+                Highlighted fields = your team&rsquo;s responsibility · greyed out = read-only for your role
+              </div>
             </div>
+
+            {GROUPS.map(group => (
+              <FieldGroupBlock
+                key={group.title}
+                group={group}
+                userRole={userRole}
+                editValues={editValues}
+                setEditValues={setEditValues}
+              />
+            ))}
+
             <div className="flex gap-2 mt-4">
               <button
                 onClick={onSave}
@@ -396,5 +516,178 @@ function ScreeningReferralRow({
         </tr>
       )}
     </>
+  );
+}
+
+function FieldGroupBlock({ group, userRole, editValues, setEditValues }: {
+  group: FieldGroup;
+  userRole: UserRole;
+  editValues: Record<string, string>;
+  setEditValues: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+}) {
+  return (
+    <div className="mb-5">
+      <div className="text-[12px] font-semibold text-gray-700 uppercase tracking-wide mb-1">{group.title}</div>
+      <div className="text-[11px] text-gray-500 mb-2">{group.description}</div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+        {group.fields.map(key => {
+          const field = FIELDS_BY_KEY[key];
+          if (!field) return null;
+          if (field.visibleIf && !field.visibleIf(editValues)) return null;
+          return (
+            <FieldEditor
+              key={field.key}
+              field={field}
+              userRole={userRole}
+              editValues={editValues}
+              setEditValues={setEditValues}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function FieldEditor({ field, userRole, editValues, setEditValues }: {
+  field: FieldConfig;
+  userRole: UserRole;
+  editValues: Record<string, string>;
+  setEditValues: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+}) {
+  const canEdit = isEditableBy(field, userRole);
+  const isYourResponsibility = field.primaryFor === userRole || field.autoStampFor === userRole;
+  const wrapperClass =
+    field.type === 'textarea' ? 'md:col-span-2 lg:col-span-3' :
+    field.type === 'radio' && (field.options?.length || 0) > 3 ? 'md:col-span-2' : '';
+
+  const value = editValues[field.key] || '';
+  const setValue = (v: string) => setEditValues(prev => ({ ...prev, [field.key]: v }));
+  const stampToday = () => setValue(todayISO());
+
+  // Border + bg cues
+  const ring =
+    isYourResponsibility && canEdit
+      ? 'ring-2 ring-amber-300 bg-amber-50/50'
+      : canEdit
+      ? 'bg-white'
+      : 'bg-gray-100 opacity-70';
+
+  return (
+    <div className={`${wrapperClass} rounded-md border border-gray-200 ${ring} p-2`}>
+      <div className="flex items-baseline justify-between gap-2">
+        <label className="block text-[10px] font-medium text-gray-600 uppercase mb-1">{field.label}</label>
+        {!canEdit && (
+          <span className="text-[9px] text-gray-400 italic">read-only for your role</span>
+        )}
+        {field.autoStampFor === userRole && canEdit && (
+          <button
+            type="button"
+            onClick={stampToday}
+            className="text-[9px] text-blue-600 hover:text-blue-800 underline"
+          >
+            stamp today
+          </button>
+        )}
+      </div>
+
+      {field.type === 'number' && (
+        <input
+          type="number"
+          min="0"
+          disabled={!canEdit}
+          value={value}
+          onChange={e => setValue(e.target.value)}
+          className="w-full px-2 py-1.5 text-xs border rounded focus:ring-1 focus:ring-blue-400 outline-none disabled:bg-transparent disabled:cursor-not-allowed"
+        />
+      )}
+      {field.type === 'text' && (
+        <input
+          type="text"
+          disabled={!canEdit}
+          value={value}
+          onChange={e => setValue(e.target.value)}
+          className="w-full px-2 py-1.5 text-xs border rounded focus:ring-1 focus:ring-blue-400 outline-none disabled:bg-transparent disabled:cursor-not-allowed"
+        />
+      )}
+      {field.type === 'textarea' && (
+        <textarea
+          rows={3}
+          disabled={!canEdit}
+          value={value}
+          onChange={e => setValue(e.target.value)}
+          className="w-full px-2 py-1.5 text-xs border rounded focus:ring-1 focus:ring-blue-400 outline-none disabled:bg-transparent disabled:cursor-not-allowed"
+        />
+      )}
+      {field.type === 'date' && (
+        <input
+          type="date"
+          disabled={!canEdit}
+          value={value}
+          onChange={e => setValue(e.target.value)}
+          className="w-full px-2 py-1.5 text-xs border rounded focus:ring-1 focus:ring-blue-400 outline-none disabled:bg-transparent disabled:cursor-not-allowed"
+        />
+      )}
+      {field.type === 'radio-yesno' && (
+        <RadioGroup
+          name={field.key}
+          value={value}
+          disabled={!canEdit}
+          options={[
+            { value: 'Yes', label: 'Yes' },
+            { value: 'No', label: 'No' },
+          ]}
+          onChange={setValue}
+          allowClear
+        />
+      )}
+      {field.type === 'radio' && (
+        <RadioGroup
+          name={field.key}
+          value={value}
+          disabled={!canEdit}
+          options={field.options || []}
+          onChange={setValue}
+          allowClear
+        />
+      )}
+    </div>
+  );
+}
+
+function RadioGroup({ name, value, options, disabled, onChange, allowClear }: {
+  name: string;
+  value: string;
+  options: { value: string; label: string }[];
+  disabled?: boolean;
+  onChange: (v: string) => void;
+  allowClear?: boolean;
+}) {
+  return (
+    <div className="flex flex-wrap gap-x-3 gap-y-1.5 mt-1">
+      {options.map(opt => (
+        <label key={opt.value} className={`flex items-center gap-1.5 text-[11px] ${disabled ? 'text-gray-400 cursor-not-allowed' : 'text-gray-800 cursor-pointer'}`}>
+          <input
+            type="radio"
+            name={name}
+            value={opt.value}
+            checked={value === opt.value}
+            disabled={disabled}
+            onChange={() => onChange(opt.value)}
+            className="w-3 h-3"
+          />
+          <span>{opt.label}</span>
+        </label>
+      ))}
+      {allowClear && value && !disabled && (
+        <button
+          type="button"
+          onClick={() => onChange('')}
+          className="text-[10px] text-gray-400 hover:text-gray-600 underline"
+        >
+          clear
+        </button>
+      )}
+    </div>
   );
 }

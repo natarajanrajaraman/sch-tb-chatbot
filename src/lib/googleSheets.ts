@@ -216,27 +216,41 @@ export async function getAllFeedback(): Promise<string[][]> {
   }
 }
 
-// v0.7 Referral Log schema additions — outcome enum + SLA dates + final dx,
-// per the old SCH FB bot's "Reached / Lost / Referred" model. Old columns
-// (A-T = referralId..xpertResult) are unchanged; new columns extend to AB.
+// v1.5 Screening Referral Log schema.
+// Retired in v1.5: `outcome` (replaced by computed Self-Check Outcome —
+// see USER-GUIDE §4.8 "Patient journey — conceptual model"),
+// `firstContactDate` / `firstFollowupDate` / `lastFollowupDate` (replaced
+// by 6 role-stamped date columns). The retired columns are wiped on
+// migration via /api/admin/migrate-screening-log.
+//
+// `removalReason` / `removedAt` / `snoozeUntil` are written-but-not-yet-
+// read in v1.5; the v1.6 journey-state computation consumes them.
 export const REFERRAL_LOG_HEADERS = [
   // A-L  — column A renamed referralId → screeningReferralId in v0.8 to
   // disambiguate from careReferralId on the Care Referral Log tab.
   'screeningReferralId', 'conversationId', 'timestamp', 'clientName',
   'clientAge', 'clientGender', 'referralType', 'township',
   'facilityNames', 'referred', 'status', 'screeningId',
-  // M-T  (telehealth-editable follow-up — bug fix: writes now start at M, not L)
+  // M-T  (Tele-Health-owned + Screening-Provider-owned action fields)
   'contactAttempts', 'clientContacted', 'referralGivenByTelehealth',
   'arrivedAtCenter', 'cxrCompleted', 'cxrResult',
   'xpertCompleted', 'xpertResult',
-  // U-AB  (v0.7 — old SCH FB bot's outcome / SLA / final dx model)
-  'outcome',          // Pending / Referred / Reached / Lost
-  'patientDx',        // TB / Non-TB
+  // U-W  (final diagnosis — gated on patientDx = 'Confirmed TB +ve')
+  'patientDx',          // Confirmed TB +ve / Confirmed TB -ve / Pending
   'tbRegistrationId',
   'tbRegistrationDate',
-  'firstContactDate',
-  'firstFollowupDate',
-  'lastFollowupDate',
+  // X-AC  (6 role-stamped contact dates introduced in v1.5)
+  'firstContactTelehealthDate',
+  'lastContactTelehealthDate',
+  'firstContactScreeningProviderDate',
+  'lastContactScreeningProviderDate',
+  'firstContactCareProviderDate',
+  'lastContactCareProviderDate',
+  // AD-AF  (removal + snooze — written in v1.5, consumed by v1.6 journey state)
+  'removalReason',      // '' / lost-to-followup / declined-screening / declined-care / moved-away / deceased / other
+  'removedAt',          // ISO timestamp set when removalReason is set
+  'snoozeUntil',        // ISO date — Tele-Health "wait until" gate
+  // AG
   'remarks',
 ];
 
@@ -249,14 +263,18 @@ export interface ReferralFollowUp {
   cxrResult?: string;
   xpertCompleted?: string;
   xpertResult?: string;
-  // v0.7
-  outcome?: string;
   patientDx?: string;
   tbRegistrationId?: string;
   tbRegistrationDate?: string;
-  firstContactDate?: string;
-  firstFollowupDate?: string;
-  lastFollowupDate?: string;
+  firstContactTelehealthDate?: string;
+  lastContactTelehealthDate?: string;
+  firstContactScreeningProviderDate?: string;
+  lastContactScreeningProviderDate?: string;
+  firstContactCareProviderDate?: string;
+  lastContactCareProviderDate?: string;
+  removalReason?: string;
+  removedAt?: string;
+  snoozeUntil?: string;
   remarks?: string;
 }
 
@@ -264,37 +282,40 @@ const EDITABLE_FOLLOWUP_KEYS: (keyof ReferralFollowUp)[] = [
   'contactAttempts', 'clientContacted', 'referralGivenByTelehealth',
   'arrivedAtCenter', 'cxrCompleted', 'cxrResult',
   'xpertCompleted', 'xpertResult',
-  'outcome', 'patientDx', 'tbRegistrationId', 'tbRegistrationDate',
-  'firstContactDate', 'firstFollowupDate', 'lastFollowupDate', 'remarks',
+  'patientDx', 'tbRegistrationId', 'tbRegistrationDate',
+  'firstContactTelehealthDate', 'lastContactTelehealthDate',
+  'firstContactScreeningProviderDate', 'lastContactScreeningProviderDate',
+  'firstContactCareProviderDate', 'lastContactCareProviderDate',
+  'removalReason', 'removedAt', 'snoozeUntil',
+  'remarks',
 ];
 
 export async function updateReferralLogFollowUp(
   screeningReferralId: string,
   followUp: ReferralFollowUp
 ): Promise<boolean> {
-  const allData = await getSheetValues('Screening Referral Log', 'A1:AB2000');
+  const allData = await getSheetValues('Screening Referral Log', 'A1:AG2000');
   const rowIndex = allData.findIndex(row => row[0] === screeningReferralId);
   if (rowIndex < 0) return false;
 
   const sheetRow = rowIndex + 1;
   const existingRow = allData[rowIndex] || [];
 
-  // Build values for columns M..AB (16 cells, 1-indexed columns 13..28).
-  // The previous code wrote to L:S which clobbered the screeningId column —
-  // L is column 12 = screeningId. This is now corrected.
+  // Build values for columns M..AG (21 cells, 1-indexed columns 13..33).
+  // Columns A..L are write-once at referral-creation time and never patched.
   const values = [EDITABLE_FOLLOWUP_KEYS.map(key => {
     const headerIdx = REFERRAL_LOG_HEADERS.indexOf(key);
     const next = followUp[key];
     if (next !== undefined) return next;
     return existingRow[headerIdx] || '';
   })];
-  await updateSheetCells('Screening Referral Log', `M${sheetRow}:AB${sheetRow}`, values);
+  await updateSheetCells('Screening Referral Log', `M${sheetRow}:AG${sheetRow}`, values);
   return true;
 }
 
 export async function getAllReferralLogs(): Promise<string[][]> {
   try {
-    return await getSheetValues('Screening Referral Log', 'A1:AB2000');
+    return await getSheetValues('Screening Referral Log', 'A1:AG2000');
   } catch {
     return [];
   }

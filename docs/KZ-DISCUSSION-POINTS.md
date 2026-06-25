@@ -141,7 +141,41 @@ the escalation prompt and ONLY with explicit Skip option.
    Per the SCH MH lit review, default = 24 months post-treatment-
    completion or shorter per WHO guidance.
 
-### 6. (Add new items here as they come up)
+### 6. v1.5 SLA thresholds for patient-journey stage tracking
+
+**Status as of v1.5.0:** The Screening Referral Log now tracks the
+patient through six stages (referral → Tele-Health contact → reached
+screening provider → CXR/Xpert result → Dx confirmed → reached care
+provider → 1st care visit), with a per-stage **overdue** flag for the
+Tele-Health team. v1.6 will surface this as a per-patient
+**Self-Check Outcome** dashboard rollup.
+
+**Proposed default SLAs (need SCH confirmation):**
+
+| Stage transition | Threshold |
+|---|---|
+| Assisted referral → first Tele-Health contact | 7 days |
+| Self-referral → arrival at TB Screening Provider | 7 days |
+| CXR / Xpert marked done → result entered | 7 days |
+| Confirmed TB +ve → referred to TB Care Provider | 7 days |
+| Referred to TB Care Provider → first care visit | 7 days |
+| Emergency / urgent alert escalation → first Tele-Health contact | **< 24 hours** |
+
+**Questions for KZ:**
+
+1. Are 7-day per-stage and <24h emergency thresholds operationally
+   realistic for SCH Tele-Health staffing?
+2. Should self-referral patients get a separate (longer?) threshold
+   on arrival-at-screening-provider, since Tele-Health isn't actively
+   chasing them?
+3. **Removal reasons** — the prototype lets Tele-Health mark a case
+   "Abandoned" with a reason: `lost-to-followup` / `declined-screening`
+   / `declined-care` / `moved-away` / `deceased` / `other`. Any
+   additions or splits SCH wants?
+4. **Snooze** — Tele-Health can snooze a case for N days when the
+   patient asked to be contacted later. Default snooze length?
+
+### 7. (Add new items here as they come up)
 
 ---
 

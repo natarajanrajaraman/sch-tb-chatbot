@@ -1,6 +1,6 @@
 # SCH TB Chatbot Prototype — User Guide
 
-**Prototype version:** v1.4.0
+**Prototype version:** v1.5.0
 **Last updated:** 2026-06-25
 
 > This guide is auto-managed by the engineering team. Sections between
@@ -169,11 +169,124 @@ The cascade chart shows how many people go through each step of the journey. It 
 
 The bars show the count. The percent shows how many continued from the step before.
 
-### 4.6 Test login
+### 4.6 The patient journey — conceptual model
+
+Every TB Self-Check Tool referral and every TB Patient Support Chatbot escalation moves through a fixed set of **stages**. The Tele-Health team owns the patient's path through these stages. A case can be closed in only two ways: by **completing all stages** or by being **marked Abandoned** (with a reason).
+
+**TB Self-Check Tool — pathway:**
+
+```
+   [REFERRAL]
+       │
+       ▼
+   STAGE 1 — Tele-Health first contact            (Assisted refs only; SLA 7 days)
+       │
+       ▼
+   STAGE 2 — Reach a TB Screening Provider        (SLA 7 days)
+       │
+       ▼
+   STAGE 3 — CXR / Xpert results entered          (SLA 7 days after test)
+       │
+       ▼
+   STAGE 4 — Patient Dx marked                    (no SLA — done when results in)
+       │  (Confirmed TB +ve / -ve / Pending)
+       ▼
+   STAGE 5 — Referred to TB Care Provider         (only if Dx = TB +ve; SLA 7d)
+       │
+       ▼
+   COMPLETE — Patient at care provider; 1st visit recorded
+```
+
+**TB Patient Support Chatbot — pathway:**
+
+```
+   [ESCALATION]    (level = telehealth or immediate)
+       │
+       ▼
+   STAGE A — Tele-Health first contact            (SLA 7d normal; <24h immediate)
+       │
+       ▼
+   STAGE B — Reach a TB Care Provider             (SLA 7 days)
+       │
+       ▼
+   COMPLETE
+```
+
+**At any stage**, a case can be marked **Abandoned** with a reason: `lost-to-followup`, `declined-screening`, `declined-care`, `moved-away`, `deceased`, or `other`. Abandoned cases are removed from the active tracking list and counted in the "Abandoned" bucket.
+
+The system computes two rollup statuses per patient — visible on the SCH Admin and SCH Tele-Health dashboards:
+
+- **Self-Check Outcome** — Tele-Health's rollup for one Screening Referral. Buckets: Not yet started · In progress (within SLA) · Overdue (past SLA) · Completed · Abandoned.
+- **Patient Support Outcome** — Tele-Health's rollup for one Care Referral. Same five buckets.
+
+(v1.5 ships the underlying fields and a simple status badge. The full per-stage rollup card lands in v1.6.)
+
+### 4.7 Workflow responsibilities by role
+
+Each role has different fields they are responsible for filling. The system highlights the fields that are your team's responsibility when you open a record. Other fields show as **read-only** to your role.
+
+**SCH Tele-Health (data stewards — they also keep the data clean for everyone else):**
+
+| What | Field on the record |
+|---|---|
+| How many times you contacted the patient | Contact Attempts |
+| Did you reach the patient? | Client Contacted (Yes / No) |
+| Did you give a referral? | Referral Given by Tele-Health (Yes / No) |
+| When did you first contact the patient? | First Contact with Tele-Health (date) |
+| When did you last contact the patient? | Last Contact with Tele-Health (date) |
+
+Tele-Health can also **back-fill** screening-provider and care-provider fields if those teams are not using the digital system. This keeps the dashboard accurate.
+
+**TB Screening Provider:**
+
+| What | Field on the record |
+|---|---|
+| When did the patient first come to your clinic? | First Contact with TB Screening Provider (date) |
+| When did the patient last come to your clinic? | Last Contact with TB Screening Provider (date) |
+| Did the patient arrive? | Arrived at Screening Centre (Yes / No) |
+| Was a CXR done? | CXR Completed (Yes / No) |
+| CXR result | CXR Result (+ve / -ve / Indeterminate) |
+| Was Xpert MTB/RIF done? | Xpert MTB/RIF Completed (Yes / No) |
+| Xpert result | Xpert MTB/RIF Result (T / TT / RR / N / TI / I) |
+
+**TB Care Provider:**
+
+| What | Field on the record |
+|---|---|
+| When did the patient first visit your clinic? | First Contact with TB Care Provider (date) |
+| When did the patient last visit your clinic? | Last Contact with TB Care Provider (date) |
+
+**Any role (anyone with back-end access):**
+
+| What | Field on the record |
+|---|---|
+| Final diagnosis | Patient Dx (Confirmed TB +ve / Confirmed TB -ve / Pending) |
+| TB Registration ID | (only fillable when Patient Dx = "Confirmed TB +ve") |
+| TB Registration Date | (only fillable when Patient Dx = "Confirmed TB +ve") |
+| Free-text notes | Remarks |
+
+**Date auto-fill:** When your team opens a record, a small **"stamp today"** button appears next to your role's date fields. Click it to fill in today's date. You can edit before saving.
+
+### 4.8 SLA thresholds (pending SCH confirmation)
+
+Each stage of the patient journey has a **time limit** before it becomes "overdue". If a stage stays in progress longer than the limit, the case is flagged as **Overdue** on the dashboard — the Tele-Health team should act.
+
+| Stage transition | Threshold |
+|---|---|
+| Assisted referral → first Tele-Health contact | 7 days |
+| Self-referral → arrival at a TB Screening Provider | 7 days |
+| CXR / Xpert marked done → result entered | 7 days |
+| Confirmed TB +ve → referred to a TB Care Provider | 7 days |
+| Referred to a TB Care Provider → first care visit | 7 days |
+| Emergency / urgent alert escalation → first Tele-Health contact | **less than 24 hours** |
+
+These thresholds are a **starting point** and need to be confirmed by SCH (see the KZ discussion-points doc). The Tele-Health team can also **snooze** a case for a set number of days when a patient has been contacted and is just waiting; snoozed cases sit out of the overdue bucket until the wait period passes. (v1.6 ships the snooze button.)
+
+### 4.9 Test login
 
 For all roles, the test username is `123` and the password is `abc`. This is only for the prototype. The real product will have proper logins.
 
-### 4.7 Known limits
+### 4.10 Known limits
 
 - This is a **test version**. Do not use it for real patient care.
 - The chatbot is **not** a doctor. It can answer general questions but it can be wrong.
@@ -213,6 +326,7 @@ A: Not directly. The engineer can change them in the code. Tell the engineer wha
 
 | Version | Date | Main changes |
 |---|---|---|
+| v1.5.0 | 2026-06-25 | Screening Referral Log refactor. The old single "Outcome" field is replaced by a per-stage **Self-Check Outcome** rollup (full visualisation in v1.6). The three old date fields are replaced by **six new role-stamped dates** (Tele-Health, Screening Provider, Care Provider — first + last contact each). **Patient Dx** is now a 3-state radio (Confirmed TB +ve / Confirmed TB -ve / Pending); TB Registration ID and Date appear only when Dx = "Confirmed TB +ve". The expanded record panel is re-organised by role, with each team's fields highlighted in amber and other fields read-only for them. Yes/No and result fields are now **radio buttons** instead of drop-downs. Each role gets a "stamp today" button next to their date fields. Tele-Health can back-fill dates and fields on behalf of teams not using the digital system. SLA thresholds for overdue tracking documented in §4.8 (pending SCH confirmation). |
 | v1.4.0 | 2026-06-25 | This user guide added. Link to the guide put into the developer panel. |
 | v1.3.0 | 2026-06-24 | SCH Admin dashboard split into two sections: TB Self-Check Tool and TB Patient Support Chatbot. Cascade charts added. "Total Screenings" renamed to "Total Self-Checks". User Journeys document link added to the developer panel. |
 | v1.2.x | 2026-06 | Referral logs and SLA tracking improved. Markdown transcript export to Google Drive added. Several smaller fixes. |

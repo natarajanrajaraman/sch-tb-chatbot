@@ -24,7 +24,6 @@ export async function PUT(request: NextRequest) {
       );
     }
     const success = await updateReferralLogFollowUp(id, {
-      // Existing follow-up fields
       contactAttempts: body.contactAttempts,
       clientContacted: body.clientContacted,
       referralGivenByTelehealth: body.referralGivenByTelehealth,
@@ -33,14 +32,23 @@ export async function PUT(request: NextRequest) {
       cxrResult: body.cxrResult,
       xpertCompleted: body.xpertCompleted,
       xpertResult: body.xpertResult,
-      // v0.7 outcome / SLA / final dx
-      outcome: body.outcome,
+      // v1.5 — final dx (radio: Confirmed TB +ve / Confirmed TB -ve / Pending)
+      // TB registration fields gated UI-side on patientDx = Confirmed TB +ve
       patientDx: body.patientDx,
       tbRegistrationId: body.tbRegistrationId,
       tbRegistrationDate: body.tbRegistrationDate,
-      firstContactDate: body.firstContactDate,
-      firstFollowupDate: body.firstFollowupDate,
-      lastFollowupDate: body.lastFollowupDate,
+      // v1.5 — 6 role-stamped contact dates (auto-suggested today by role,
+      // editable by everyone for back-fill)
+      firstContactTelehealthDate: body.firstContactTelehealthDate,
+      lastContactTelehealthDate: body.lastContactTelehealthDate,
+      firstContactScreeningProviderDate: body.firstContactScreeningProviderDate,
+      lastContactScreeningProviderDate: body.lastContactScreeningProviderDate,
+      firstContactCareProviderDate: body.firstContactCareProviderDate,
+      lastContactCareProviderDate: body.lastContactCareProviderDate,
+      // v1.5 — written; v1.6 will consume for journey-state computation
+      removalReason: body.removalReason,
+      removedAt: body.removedAt,
+      snoozeUntil: body.snoozeUntil,
       remarks: body.remarks,
     });
     if (!success) {

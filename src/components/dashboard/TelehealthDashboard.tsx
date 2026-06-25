@@ -58,36 +58,45 @@ function colIndex(headers: string[], name: string): number {
   return headers.findIndex(h => h === name);
 }
 
+// v1.5 — wired to the new schema. The full per-stage "Self-Check Outcome"
+// computation ships in v1.6; for v1.5 we keep the v0.7 bucket vocabulary
+// but read from the new fields so the dashboard doesn't break.
+//   outcome → retired; replaced by removalReason (abandoned) + patientDx +
+//             arrivedAtCenter (resolved heuristic)
+//   firstContactDate → firstContactTelehealthDate
 function classifyScreeningRow(row: string[], headers: string[]): { bucket: SlaBucket; days: number | null; label: string } {
   const cContactAttempts = colIndex(headers, 'contactAttempts');
   const cClientContacted = colIndex(headers, 'clientContacted');
   const cArrived = colIndex(headers, 'arrivedAtCenter');
-  const cOutcome = colIndex(headers, 'outcome');
-  const cFirstContact = colIndex(headers, 'firstContactDate');
+  const cPatientDx = colIndex(headers, 'patientDx');
+  const cRemovalReason = colIndex(headers, 'removalReason');
+  const cFirstContact = colIndex(headers, 'firstContactTelehealthDate');
   const cTimestamp = colIndex(headers, 'timestamp');
   const contactAttempts = parseInt((row[cContactAttempts] || '0').trim(), 10) || 0;
   const clientContacted = (row[cClientContacted] || '').trim();
   const arrived = (row[cArrived] || '').trim();
-  const outcome = (row[cOutcome] || '').trim();
+  const patientDx = (row[cPatientDx] || '').trim();
+  const removalReason = (row[cRemovalReason] || '').trim();
   const firstContact = (row[cFirstContact] || '').trim();
   const timestamp = (row[cTimestamp] || '').trim();
 
-  if (outcome === 'Lost') return { bucket: 'lost', days: null, label: 'Marked Lost' };
-  if (outcome === 'Reached' || outcome === 'TB' || outcome === 'Non-TB' || arrived === 'Yes') {
-    return { bucket: 'resolved_recent', days: null, label: `Resolved${outcome ? ` (${outcome})` : ''}` };
+  if (removalReason) return { bucket: 'lost', days: null, label: `Abandoned (${removalReason})` };
+  if (arrived === 'Yes' || patientDx === 'Confirmed TB +ve' || patientDx === 'Confirmed TB -ve') {
+    return { bucket: 'resolved_recent', days: null, label: patientDx || 'Reached centre' };
   }
   const hasBeenContacted = !!firstContact || contactAttempts > 0 || clientContacted === 'Yes';
   if (!hasBeenContacted) {
-    return { bucket: 'awaiting_first', days: null, label: 'No 1st contact yet' };
+    return { bucket: 'awaiting_first', days: null, label: 'No Tele-Health contact yet' };
   }
   const startStr = firstContact || timestamp;
   const start = new Date(startStr);
   if (isNaN(start.getTime())) return { bucket: 'fresh', days: 0, label: 'Contacted (no date)' };
   const days = Math.floor((Date.now() - start.getTime()) / (1000 * 60 * 60 * 24));
-  if (days < 2) return { bucket: 'fresh', days, label: `${days}d since 1st contact` };
-  if (days < 12) return { bucket: 'first_fu_due', days, label: `${days}d — 1st FU due` };
-  if (days < 14) return { bucket: 'last_fu_due', days, label: `${days}d — last FU due` };
-  return { bucket: 'past_sla', days, label: `${days}d — past 2-week SLA` };
+  // v1.5 SLA: 7 days per stage (pending SCH confirmation — see KZ-DISCUSSION-POINTS).
+  if (days < 4) return { bucket: 'fresh', days, label: `${days}d since 1st contact` };
+  if (days < 7) return { bucket: 'first_fu_due', days, label: `${days}d — follow-up due` };
+  if (days < 14) return { bucket: 'last_fu_due', days, label: `${days}d — overdue (>7d)` };
+  return { bucket: 'past_sla', days, label: `${days}d — past 14-day SLA` };
 }
 
 function classifyCareRow(row: string[], headers: string[]): { bucket: SlaBucket; days: number | null; label: string } {

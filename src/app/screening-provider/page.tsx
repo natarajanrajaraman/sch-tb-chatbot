@@ -58,7 +58,7 @@ function ScreeningProviderInner() {
       {loading ? (
         <div className="text-center py-12 text-slate-500">Loading data…</div>
       ) : (
-        <ScreeningReferralLogTable data={data} onRefresh={fetchData} editable={true} />
+        <ScreeningReferralLogTable data={data} onRefresh={fetchData} editable={true} userRole="screening-provider" />
       )}
     </SpeedbackShell>
   );

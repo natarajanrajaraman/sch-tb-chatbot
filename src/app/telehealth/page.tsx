@@ -123,6 +123,7 @@ function TelehealthInner() {
             data={screening}
             onRefresh={fetchData}
             editable={true}
+            userRole="telehealth"
             expandRecordId={expandRecordId}
             onExpandHandled={() => setExpandRecordId(null)}
           />
