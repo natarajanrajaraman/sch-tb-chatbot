@@ -106,9 +106,32 @@ export default function Home() {
 
   if (!mounted) return null;
 
+  // v1.8.0 — flatten the translation channel data once so we can pass
+  // it to the drawer below without duplicating the mapping.
+  const translationMessages = isP3Mode
+    ? p3Messages.map(m => ({
+        id: m.id,
+        sender: (m.role === 'user' ? 'user' : 'bot') as 'user' | 'bot',
+        textMm: m.textMm,
+        textEn: m.textEn,
+        timestamp: m.ts,
+      }))
+    : messages;
+
   return (
     <div className="h-screen flex bg-gray-900 overflow-hidden relative">
-      {/* LEFT: Clean device mockup + floating restart button below */}
+      {/* v1.8.0 — DASHBOARDS strip on the far left.
+          Mirrors the SpeedbackShell sidebar so role-switching is a
+          single click without opening the dev panel. */}
+      <aside className="w-14 bg-slate-950 border-r border-slate-800 flex flex-col items-center py-3 gap-1.5 shrink-0">
+        <div className="text-[7px] uppercase tracking-wider text-slate-500 mb-1 font-semibold">Roles</div>
+        <a href="/admin" title="SCH Admin View" className="w-10 h-10 flex items-center justify-center rounded-lg bg-slate-800/70 hover:bg-slate-700 text-lg leading-none">🤓</a>
+        <a href="/telehealth" title="SCH Tele-Health View" className="w-10 h-10 flex items-center justify-center rounded-lg bg-slate-800/70 hover:bg-slate-700 text-lg leading-none">🎧</a>
+        <a href="/screening-provider" title="TB Screening Provider View" className="w-10 h-10 flex items-center justify-center rounded-lg bg-slate-800/70 hover:bg-slate-700 text-lg leading-none">🩻</a>
+        <a href="/care-provider" title="TB Care Provider View" className="w-10 h-10 flex items-center justify-center rounded-lg bg-slate-800/70 hover:bg-slate-700 text-lg leading-none">🩺</a>
+      </aside>
+
+      {/* CENTER: Clean device mockup + floating restart button below */}
       <div className="flex-1 flex flex-col items-center justify-center p-6 gap-3 min-h-0">
         <div
           className="w-full rounded-2xl overflow-hidden shadow-2xl border-4 border-gray-700 flex flex-col transition-all duration-300"
@@ -155,12 +178,43 @@ export default function Home() {
         </button>
       </div>
 
+      {/* v1.8.0 — Translation pop-out drawer (between the chat and the
+          dev panel). Tab handle sits on the LEFT edge of this drawer,
+          so when closed it appears at the right edge of the chat. */}
+      <button
+        onClick={() => setTranslationOpen(!translationOpen)}
+        className="absolute top-[35%] -translate-y-1/2 z-30 bg-blue-700/80 text-blue-50 px-1 py-3 text-[9px] font-bold rounded-l hover:bg-blue-700 transition-colors"
+        style={{
+          writingMode: 'vertical-rl',
+          right: (translationOpen ? 320 : 0) + (debugPanelOpen ? 320 : 0),
+        }}
+        title={translationOpen ? 'Hide English translation panel' : 'Open the English translation panel (read what each Burmese message says)'}
+      >
+        {translationOpen ? '◀ HIDE EN' : 'EN ▶'}
+      </button>
+      <div
+        className={`flex flex-col border-l border-gray-700/50 bg-slate-800/80 overflow-hidden transition-all duration-300 ${
+          translationOpen ? 'w-[320px]' : 'w-0 border-l-0'
+        }`}
+      >
+        {translationOpen && (
+          <>
+            <div className="bg-blue-900/30 text-blue-300 px-3 py-1.5 text-[10px] font-semibold tracking-wider uppercase shrink-0 border-b border-gray-700/30">
+              English Translation
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              <TranslationPanel messages={translationMessages} />
+            </div>
+          </>
+        )}
+      </div>
+
       {/* Toggle tab for dev panel (was: debug) */}
       <button
         onClick={() => setDebugPanelOpen(!debugPanelOpen)}
         className="absolute top-1/2 -translate-y-1/2 right-0 z-30 bg-yellow-400/80 text-yellow-900/70 px-1 py-3 text-[9px] font-bold rounded-l hover:bg-yellow-400 transition-colors"
         style={{ writingMode: 'vertical-rl', right: debugPanelOpen ? '320px' : '0' }}
-        title={debugPanelOpen ? 'Close the Dev / tester panel' : 'Open the Dev / tester panel (model picker, cost meter, dashboards, KB)'}
+        title={debugPanelOpen ? 'Close the Dev / tester panel' : 'Open the Dev / tester panel (model picker, cost meter, KB, feedback)'}
       >
         {debugPanelOpen ? 'CLOSE' : 'DEV'}
       </button>
@@ -240,75 +294,10 @@ export default function Home() {
                 </div>
               </CollapsibleSection>
 
-              {/* English translation — expanded by default */}
-              <div className="flex flex-col min-h-0">
-                <button
-                  onClick={() => setTranslationOpen(!translationOpen)}
-                  className={`px-3 py-1.5 text-[10px] font-medium tracking-wider uppercase text-left border-b border-gray-700/30 transition-colors shrink-0 ${
-                    translationOpen
-                      ? 'bg-blue-900/30 text-blue-300'
-                      : 'bg-gray-800/40 text-gray-500 hover:text-gray-300 hover:bg-gray-800/60'
-                  }`}
-                >
-                  {translationOpen ? '▾' : '▸'} English Translation
-                </button>
-                {translationOpen && (
-                  <div className="min-h-[180px] max-h-[280px] overflow-hidden">
-                    <TranslationPanel
-                      messages={
-                        isP3Mode
-                          ? p3Messages.map(m => ({
-                              id: m.id,
-                              sender: (m.role === 'user' ? 'user' : 'bot') as 'user' | 'bot',
-                              textMm: m.textMm,
-                              textEn: m.textEn,
-                              timestamp: m.ts,
-                            }))
-                          : messages
-                      }
-                    />
-                  </div>
-                )}
-              </div>
-
-              {/* Dashboards — expanded by default. v1.7.2 — emoji icons
-                  per role match the sidebar nav in SpeedbackShell. */}
-              <CollapsibleSection title="Dashboards (mock auth)" defaultOpen={true}>
-                <div className="px-3 py-2 space-y-1 bg-gray-800/40">
-                  <a
-                    href="/admin"
-                    title="Full read+edit across Sessions, Feedback, Screening Referral Log, Care Referral Log. Link to the underlying Google Sheet."
-                    className="flex items-center gap-2 w-full px-2 py-1 bg-gray-700/50 text-gray-200 text-[10px] font-medium rounded hover:bg-gray-700"
-                  >
-                    <span className="text-base leading-none">🤓</span>
-                    <span>SCH Admin View</span>
-                  </a>
-                  <a
-                    href="/telehealth"
-                    title="SCH Tele-Health team's dashboard. Tabbed: Screening Referral Log + Care Referral Log, both editable."
-                    className="flex items-center gap-2 w-full px-2 py-1 bg-gray-700/50 text-gray-200 text-[10px] font-medium rounded hover:bg-gray-700"
-                  >
-                    <span className="text-base leading-none">🎧</span>
-                    <span>SCH Tele-Health View</span>
-                  </a>
-                  <a
-                    href="/screening-provider"
-                    title="TB screening providers (CXR, sputum testing). Read+edit Screening Referral Log."
-                    className="flex items-center gap-2 w-full px-2 py-1 bg-gray-700/50 text-gray-200 text-[10px] font-medium rounded hover:bg-gray-700"
-                  >
-                    <span className="text-base leading-none">🩻</span>
-                    <span>TB Screening Provider View</span>
-                  </a>
-                  <a
-                    href="/care-provider"
-                    title="TB care providers (treatment centres). Read+edit Care Referral Log + the TB-positive subset of the Screening Referral Log."
-                    className="flex items-center gap-2 w-full px-2 py-1 bg-gray-700/50 text-gray-200 text-[10px] font-medium rounded hover:bg-gray-700"
-                  >
-                    <span className="text-base leading-none">🩺</span>
-                    <span>TB Care Provider View</span>
-                  </a>
-                </div>
-              </CollapsibleSection>
+              {/* v1.8.0 — English Translation and Dashboards moved OUT
+                  of the dev panel. The translation lives as a pop-out
+                  drawer to the right of the chat; the dashboards live
+                  as a fixed strip on the left of the chat. */}
 
               {/* Docs (GitHub web view) — collapsed by default */}
               <CollapsibleSection title="Docs (GitHub web view)" defaultOpen={false}>
