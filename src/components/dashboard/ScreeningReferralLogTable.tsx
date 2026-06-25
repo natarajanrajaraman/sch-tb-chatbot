@@ -40,25 +40,42 @@ const FOLLOW_UP_FIELDS: FieldConfig[] = [
 type SlaStatus = 'unset' | 'fresh' | 'first_followup_due' | 'last_followup_due' | 'sla_breach' | 'resolved' | 'lost';
 
 function slaStatus(row: string[]): { status: SlaStatus; daysSinceContact: number | null; label: string } {
+  const contactAttempts = parseInt((row[12] || '0').trim(), 10) || 0;
+  const clientContacted = (row[13] || '').trim();
+  const arrivedAtCenter = (row[15] || '').trim();
   const outcome = (row[20] || '').trim();
   const firstContact = (row[24] || '').trim();
+  const timestamp = (row[2] || '').trim(); // referral row created at
 
   if (outcome === 'Lost') return { status: 'lost', daysSinceContact: null, label: 'Lost' };
-  if (outcome === 'Reached' || outcome === 'TB' || outcome === 'Non-TB') {
+  if (outcome === 'Reached' || outcome === 'TB' || outcome === 'Non-TB' || arrivedAtCenter === 'Yes') {
     return { status: 'resolved', daysSinceContact: null, label: 'Resolved' };
   }
-  if (!firstContact) {
+
+  // Has the patient been contacted yet? Check multiple signals — firstContactDate
+  // is the canonical one, but contactAttempts > 0 or clientContacted='Yes' also
+  // mean the telehealth team has engaged the patient (just hasn't backfilled
+  // the explicit date field).
+  const hasBeenContacted = !!firstContact || contactAttempts > 0 || clientContacted === 'Yes';
+
+  if (!hasBeenContacted) {
     return { status: 'unset', daysSinceContact: null, label: 'No 1st contact yet' };
   }
-  const start = new Date(firstContact);
+
+  // Use firstContactDate if set, else fall back to the referral row's timestamp
+  // so the SLA clock isn't blocked just because the date field is empty.
+  const startStr = firstContact || timestamp;
+  const start = new Date(startStr);
   if (isNaN(start.getTime())) {
-    return { status: 'unset', daysSinceContact: null, label: 'Invalid 1st contact date' };
+    // Has contact signals but no parseable date — bucket as fresh.
+    return { status: 'fresh', daysSinceContact: 0, label: 'Contacted (no date)' };
   }
   const days = Math.floor((Date.now() - start.getTime()) / (1000 * 60 * 60 * 24));
-  if (days < 2) return { status: 'fresh', daysSinceContact: days, label: `${days}d — within window` };
-  if (days < 12) return { status: 'first_followup_due', daysSinceContact: days, label: `${days}d — 1st FU due` };
-  if (days < 14) return { status: 'last_followup_due', daysSinceContact: days, label: `${days}d — last FU due` };
-  return { status: 'sla_breach', daysSinceContact: days, label: `${days}d — past 2-week SLA` };
+  const dateSource = firstContact ? '' : ' (from timestamp)';
+  if (days < 2) return { status: 'fresh', daysSinceContact: days, label: `${days}d — within window${dateSource}` };
+  if (days < 12) return { status: 'first_followup_due', daysSinceContact: days, label: `${days}d — 1st FU due${dateSource}` };
+  if (days < 14) return { status: 'last_followup_due', daysSinceContact: days, label: `${days}d — last FU due${dateSource}` };
+  return { status: 'sla_breach', daysSinceContact: days, label: `${days}d — past 2-week SLA${dateSource}` };
 }
 
 const SLA_ROW_BG: Record<SlaStatus, string> = {

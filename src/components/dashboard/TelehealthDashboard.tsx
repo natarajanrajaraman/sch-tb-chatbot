@@ -59,20 +59,30 @@ function colIndex(headers: string[], name: string): number {
 }
 
 function classifyScreeningRow(row: string[], headers: string[]): { bucket: SlaBucket; days: number | null; label: string } {
+  const cContactAttempts = colIndex(headers, 'contactAttempts');
+  const cClientContacted = colIndex(headers, 'clientContacted');
+  const cArrived = colIndex(headers, 'arrivedAtCenter');
   const cOutcome = colIndex(headers, 'outcome');
   const cFirstContact = colIndex(headers, 'firstContactDate');
+  const cTimestamp = colIndex(headers, 'timestamp');
+  const contactAttempts = parseInt((row[cContactAttempts] || '0').trim(), 10) || 0;
+  const clientContacted = (row[cClientContacted] || '').trim();
+  const arrived = (row[cArrived] || '').trim();
   const outcome = (row[cOutcome] || '').trim();
   const firstContact = (row[cFirstContact] || '').trim();
+  const timestamp = (row[cTimestamp] || '').trim();
 
   if (outcome === 'Lost') return { bucket: 'lost', days: null, label: 'Marked Lost' };
-  if (outcome === 'Reached' || outcome === 'TB' || outcome === 'Non-TB') {
-    return { bucket: 'resolved_recent', days: null, label: `Resolved (${outcome})` };
+  if (outcome === 'Reached' || outcome === 'TB' || outcome === 'Non-TB' || arrived === 'Yes') {
+    return { bucket: 'resolved_recent', days: null, label: `Resolved${outcome ? ` (${outcome})` : ''}` };
   }
-  if (!firstContact) {
+  const hasBeenContacted = !!firstContact || contactAttempts > 0 || clientContacted === 'Yes';
+  if (!hasBeenContacted) {
     return { bucket: 'awaiting_first', days: null, label: 'No 1st contact yet' };
   }
-  const start = new Date(firstContact);
-  if (isNaN(start.getTime())) return { bucket: 'awaiting_first', days: null, label: 'Invalid date' };
+  const startStr = firstContact || timestamp;
+  const start = new Date(startStr);
+  if (isNaN(start.getTime())) return { bucket: 'fresh', days: 0, label: 'Contacted (no date)' };
   const days = Math.floor((Date.now() - start.getTime()) / (1000 * 60 * 60 * 24));
   if (days < 2) return { bucket: 'fresh', days, label: `${days}d since 1st contact` };
   if (days < 12) return { bucket: 'first_fu_due', days, label: `${days}d — 1st FU due` };
@@ -84,32 +94,48 @@ function classifyCareRow(row: string[], headers: string[]): { bucket: SlaBucket;
   const cStatus = colIndex(headers, 'status');
   const cTimestamp = colIndex(headers, 'timestamp');
   const cFollowUp = colIndex(headers, 'followUpDate');
+  const cPatientContact = colIndex(headers, 'patientContact');
   const status = (row[cStatus] || '').trim();
   const tsStr = (row[cTimestamp] || '').trim();
   const fuStr = (row[cFollowUp] || '').trim();
+  const patientContact = (row[cPatientContact] || '').trim();
+
   if (status === 'Lost') return { bucket: 'lost', days: null, label: 'Lost' };
   if (status === 'Closed' || status === 'In Care') {
     return { bucket: 'resolved_recent', days: null, label: status };
   }
-  // Use followUpDate when present, else the row's timestamp.
-  const ref = fuStr ? new Date(fuStr) : (tsStr ? new Date(tsStr) : null);
-  if (!ref || isNaN(ref.getTime())) {
-    return { bucket: 'awaiting_first', days: null, label: status || 'Pending' };
-  }
-  const days = Math.floor((Date.now() - ref.getTime()) / (1000 * 60 * 60 * 24));
-  if (status === 'Pending' && days < 2) return { bucket: 'fresh', days, label: `${days}d since referral` };
-  if (status === 'Pending' && days < 12) return { bucket: 'first_fu_due', days, label: `${days}d — 1st FU due` };
-  if (status === 'Pending' && days < 14) return { bucket: 'last_fu_due', days, label: `${days}d — last FU due` };
-  if (days >= 14 && status !== 'In Care' && status !== 'Closed') {
+
+  // Has the team made first contact yet? Signals: status='Contacted', or
+  // patient contact info captured, or any followUpDate.
+  const hasBeenContacted = status === 'Contacted' || !!patientContact || !!fuStr;
+  const refStr = fuStr || tsStr;
+  const ref = refStr ? new Date(refStr) : null;
+
+  if (!hasBeenContacted) {
+    // Pending: SLA clock starts from the row's timestamp.
+    if (!ref || isNaN(ref.getTime())) {
+      return { bucket: 'awaiting_first', days: null, label: status || 'Pending' };
+    }
+    const days = Math.floor((Date.now() - ref.getTime()) / (1000 * 60 * 60 * 24));
+    if (days < 2) return { bucket: 'awaiting_first', days, label: `${days}d — awaiting 1st contact` };
+    if (days < 12) return { bucket: 'first_fu_due', days, label: `${days}d — 1st contact due` };
+    if (days < 14) return { bucket: 'last_fu_due', days, label: `${days}d — last attempt due` };
     return { bucket: 'past_sla', days, label: `${days}d — past 2-week SLA` };
   }
-  return { bucket: 'fresh', days, label: `${days}d — ${status}` };
+
+  // Already contacted — show as in progress.
+  if (!ref || isNaN(ref.getTime())) {
+    return { bucket: 'fresh', days: 0, label: 'Contacted (no date)' };
+  }
+  const days = Math.floor((Date.now() - ref.getTime()) / (1000 * 60 * 60 * 24));
+  if (days < 14) return { bucket: 'fresh', days, label: `${days}d — ${status || 'in progress'}` };
+  return { bucket: 'past_sla', days, label: `${days}d — past 2-week SLA` };
 }
 
 export default function TelehealthDashboard({ screeningData, careData, alertsData, onJumpToTab, onJumpToRecord }: TelehealthDashboardProps) {
   const [sortBy, setSortBy] = useState<'urgency' | 'oldest' | 'newest' | 'name'>('urgency');
 
-  const { outstanding, slaCounts, openAlerts } = useMemo(() => {
+  const { outstanding, slaCounts, openAlerts, openAlertsList } = useMemo(() => {
     const sHeaders = screeningData[0] || [];
     const sRows = screeningData.slice(1);
     const cHeaders = careData[0] || [];
@@ -143,6 +169,28 @@ export default function TelehealthDashboard({ screeningData, careData, alertsDat
       });
     }
 
+    // Build the alerts queue separately so the dashboard can list them.
+    // Columns A-M per ALERTS_LOG_HEADERS:
+    //   0 alertId · 1 conversationId · 2 alertTimestamp · 3 mode
+    //   4 escalationLevel · 5 triggerReason · 6 userMessageSnippet
+    //   7 careReferralId · 8 transcriptUrl · 9 reviewStatus
+    const alertItems: { alertId: string; level: string; ts: string; reason: string; snippet: string; careReferralId: string; conversationId: string }[] = [];
+    for (const r of aRows) {
+      const reviewStatus = (r[9] || '').trim();
+      if (reviewStatus && reviewStatus !== 'Open') continue;
+      alertItems.push({
+        alertId: r[0] || '',
+        level: (r[4] || '').trim(),
+        ts: (r[2] || '').trim(),
+        reason: (r[5] || '').trim(),
+        snippet: (r[6] || '').trim(),
+        careReferralId: (r[7] || '').trim(),
+        conversationId: (r[1] || '').trim(),
+      });
+    }
+    // Most recent first
+    alertItems.sort((a, b) => (b.ts || '').localeCompare(a.ts || ''));
+
     const counts: Record<SlaBucket, { total: number; S: number; C: number; A: number }> = {
       past_sla: { total: 0, S: 0, C: 0, A: 0 },
       last_fu_due: { total: 0, S: 0, C: 0, A: 0 },
@@ -157,12 +205,9 @@ export default function TelehealthDashboard({ screeningData, careData, alertsDat
       counts[o.bucket][o.type] += 1;
     }
 
-    const openAlertCount = aRows.filter(r => {
-      const reviewStatus = (r[9] || '').trim();
-      return !reviewStatus || reviewStatus === 'Open';
-    }).length;
+    const openAlertCount = alertItems.length;
 
-    return { outstanding: result, slaCounts: counts, openAlerts: openAlertCount };
+    return { outstanding: result, slaCounts: counts, openAlerts: openAlertCount, openAlertsList: alertItems };
   }, [screeningData, careData, alertsData]);
 
   const sortFn = useMemo(() => {
@@ -249,6 +294,56 @@ export default function TelehealthDashboard({ screeningData, careData, alertsDat
           <div className="text-[11px] text-gray-500 mt-0.5">P3 conversations to triage</div>
         </button>
         {card(SLA_LABEL.resolved_recent, slaCounts.resolved_recent.total, slaCounts.resolved_recent, 'border-emerald-400')}
+      </div>
+
+      {/* Open red-flag alerts — first list per Raj's spec. */}
+      <div>
+        <h3 className="text-sm font-semibold text-gray-700 mb-2">⚠️ Open red-flag alerts</h3>
+        <div className="bg-white rounded-lg shadow-sm overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="bg-gray-50 border-b">
+                <th className="px-3 py-2 text-left font-semibold text-gray-600">Alert ID</th>
+                <th className="px-3 py-2 text-left font-semibold text-gray-600">Level</th>
+                <th className="px-3 py-2 text-left font-semibold text-gray-600">Trigger</th>
+                <th className="px-3 py-2 text-left font-semibold text-gray-600">User message</th>
+                <th className="px-3 py-2 text-left font-semibold text-gray-600">When</th>
+                <th className="px-3 py-2 text-left font-semibold text-gray-600"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {openAlertsList.length === 0 ? (
+                <tr><td colSpan={6} className="text-center py-6 text-gray-400">No open red-flag alerts.</td></tr>
+              ) : (
+                openAlertsList.slice(0, 10).map(a => (
+                  <tr
+                    key={a.alertId}
+                    onClick={() => {
+                      if (onJumpToRecord) onJumpToRecord('alerts', a.alertId);
+                      else onJumpToTab('alerts');
+                    }}
+                    className={`border-b cursor-pointer hover:bg-gray-50 ${
+                      a.level === 'immediate' ? 'bg-red-50' : 'bg-amber-50'
+                    }`}
+                  >
+                    <td className="px-3 py-2 font-mono text-[11px]">{a.alertId}</td>
+                    <td className="px-3 py-2">
+                      <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-semibold ${
+                        a.level === 'immediate' ? 'bg-red-100 text-red-800' : 'bg-orange-100 text-orange-800'
+                      }`}>
+                        {a.level}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 max-w-[260px] truncate" title={a.reason}>{a.reason}</td>
+                    <td className="px-3 py-2 max-w-[300px] truncate text-gray-600 italic" title={a.snippet}>{a.snippet}</td>
+                    <td className="px-3 py-2 text-[11px] text-gray-500 whitespace-nowrap">{a.ts ? new Date(a.ts).toLocaleString() : ''}</td>
+                    <td className="px-3 py-2 text-[11px] text-blue-600 hover:underline whitespace-nowrap">Review →</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Action queues */}

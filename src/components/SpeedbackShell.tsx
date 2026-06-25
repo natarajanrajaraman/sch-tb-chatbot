@@ -37,7 +37,10 @@ const NAV_ITEMS = [
 
 export default function SpeedbackShell({ title, subtitle, activeView, rightActions, search, children }: SpeedbackShellProps) {
   return (
-    <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#FAF7F2' }}>
+    // h-screen + overflow-hidden so the inner <main>'s overflow-y-auto is what
+    // actually scrolls. Previously this was min-h-screen, which lets the outer
+    // grow with content and defeats the inner scroll.
+    <div className="h-screen overflow-hidden flex flex-col" style={{ backgroundColor: '#FAF7F2' }}>
       {/* Sandbox / Prototype banner */}
       <div className="bg-amber-100 text-amber-900 text-xs px-4 py-1.5 text-center font-medium border-b border-amber-200">
         ⚠️ Prototype Environment — design mirrors Speedback for SCH preview
@@ -79,7 +82,7 @@ export default function SpeedbackShell({ title, subtitle, activeView, rightActio
         </aside>
 
         {/* Content column */}
-        <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex-1 flex flex-col min-w-0 min-h-0">
           {/* Header bar — brand + search + actions */}
           <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center gap-4 shrink-0">
             <div className="flex items-center gap-2 shrink-0">
