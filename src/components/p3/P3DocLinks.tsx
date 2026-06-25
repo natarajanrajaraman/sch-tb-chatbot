@@ -18,6 +18,7 @@ type Link = { label: string; href: string; tag?: string };
 
 const LINKS: Link[] = [
   { label: 'User Guide (SCH-facing)', href: USER_GUIDE_GDOC, tag: 'GDOC' },
+  { label: 'SRS (engineering spec)', href: `${REPO_BASE}/docs/SRS.md`, tag: 'SPEC' },
   { label: 'README', href: `${REPO_BASE}/README.md` },
   { label: 'User journeys (testing)', href: `${REPO_BASE}/docs/USER-JOURNEYS.md` },
   { label: 'P3 — System prompt', href: `${REPO_BASE}/docs/p3-system-prompt.md`, tag: 'P3' },
