@@ -244,6 +244,7 @@ export interface ReferralFollowUp {
   removedAt?: string;
   snoozeUntil?: string;
   remarks?: string;
+  careProviderReferralCompleted?: string;
 }
 
 const EDITABLE_FOLLOWUP_KEYS: (keyof ReferralFollowUp)[] = [
@@ -256,20 +257,21 @@ const EDITABLE_FOLLOWUP_KEYS: (keyof ReferralFollowUp)[] = [
   'firstContactCareProviderDate', 'lastContactCareProviderDate',
   'removalReason', 'removedAt', 'snoozeUntil',
   'remarks',
+  'careProviderReferralCompleted',
 ];
 
 export async function updateReferralLogFollowUp(
   screeningReferralId: string,
   followUp: ReferralFollowUp
 ): Promise<boolean> {
-  const allData = await getSheetValues('Screening Referral Log', 'A1:AG2000');
+  const allData = await getSheetValues('Screening Referral Log', 'A1:AH2000');
   const rowIndex = allData.findIndex(row => row[0] === screeningReferralId);
   if (rowIndex < 0) return false;
 
   const sheetRow = rowIndex + 1;
   const existingRow = allData[rowIndex] || [];
 
-  // Build values for columns M..AG (21 cells, 1-indexed columns 13..33).
+  // Build values for columns M..AH (22 cells, 1-indexed columns 13..34).
   // Columns A..L are write-once at referral-creation time and never patched.
   const values = [EDITABLE_FOLLOWUP_KEYS.map(key => {
     const headerIdx = REFERRAL_LOG_HEADERS.indexOf(key);
@@ -277,13 +279,13 @@ export async function updateReferralLogFollowUp(
     if (next !== undefined) return next;
     return existingRow[headerIdx] || '';
   })];
-  await updateSheetCells('Screening Referral Log', `M${sheetRow}:AG${sheetRow}`, values);
+  await updateSheetCells('Screening Referral Log', `M${sheetRow}:AH${sheetRow}`, values);
   return true;
 }
 
 export async function getAllReferralLogs(): Promise<string[][]> {
   try {
-    return await getSheetValues('Screening Referral Log', 'A1:AG2000');
+    return await getSheetValues('Screening Referral Log', 'A1:AH2000');
   } catch {
     return [];
   }
@@ -296,7 +298,7 @@ export async function clearScreeningReferralLogDataRows(): Promise<void> {
   const sheets = getSheets();
   await sheets.spreadsheets.values.clear({
     spreadsheetId: SPREADSHEET_ID,
-    range: 'Screening Referral Log!A2:AG10000',
+    range: 'Screening Referral Log!A2:AH10000',
   });
 }
 

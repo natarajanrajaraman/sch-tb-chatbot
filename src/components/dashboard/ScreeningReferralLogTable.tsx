@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, Fragment } from 'react';
 import { downloadCSV } from './DataTable';
 import TranscriptLink from './TranscriptLink';
 import {
@@ -89,15 +89,17 @@ const FIELDS: FieldConfig[] = [
     type: 'date',
     editableBy: ['admin', 'telehealth', 'screening-provider'],
     autoStampFor: 'screening-provider',
+    alwaysOfferStampToday: true,
   },
   {
     key: 'lastContactScreeningProviderDate', label: 'Last Contact with TB Screening Provider', col: 26,
     type: 'date',
     editableBy: ['admin', 'telehealth', 'screening-provider'],
     autoStampFor: 'screening-provider',
+    alwaysOfferStampToday: true,
   },
   {
-    key: 'arrivedAtCenter', label: 'Arrived at Screening Centre', col: 15,
+    key: 'arrivedAtCenter', label: 'Arrived at Screening Provider', col: 15,
     type: 'radio-yesno',
     editableBy: ['admin', 'telehealth', 'screening-provider'],
     primaryFor: 'screening-provider',
@@ -148,6 +150,7 @@ const FIELDS: FieldConfig[] = [
     options: [
       { value: 'Confirmed TB +ve', label: 'Confirmed TB +ve' },
       { value: 'Confirmed TB -ve', label: 'Confirmed TB -ve' },
+      { value: 'Indeterminate', label: 'Indeterminate' },
       { value: 'Pending', label: 'Pending' },
     ],
     editableBy: 'all',
@@ -167,6 +170,15 @@ const FIELDS: FieldConfig[] = [
     primaryFor: ['care-provider'],
     visibleIf: v => v.patientDx === 'Confirmed TB +ve',
   },
+  {
+    key: 'careProviderReferralCompleted',
+    label: 'Referral to Care Provider Completed?',
+    col: 33,
+    type: 'radio-yesno',
+    editableBy: 'all',
+    primaryFor: ['care-provider', 'telehealth'],
+    visibleIf: v => v.patientDx === 'Confirmed TB +ve' || v.patientDx === 'Indeterminate',
+  },
 
   // Care Provider group
   {
@@ -174,12 +186,14 @@ const FIELDS: FieldConfig[] = [
     type: 'date',
     editableBy: ['admin', 'telehealth', 'care-provider'],
     autoStampFor: 'care-provider',
+    alwaysOfferStampToday: true,
   },
   {
     key: 'lastContactCareProviderDate', label: 'Last Contact with TB Care Provider', col: 28,
     type: 'date',
     editableBy: ['admin', 'telehealth', 'care-provider'],
     autoStampFor: 'care-provider',
+    alwaysOfferStampToday: true,
   },
 
   // v1.6 — Removal + snooze (Admin + Tele-Health only). When set, these
@@ -228,8 +242,8 @@ const GROUPS: FieldGroup[] = [
   },
   {
     title: 'Final diagnosis',
-    description: 'Marked by anyone reviewing the case once test results are in. TB Registration ID + Date only apply when Dx = Confirmed TB +ve.',
-    fields: ['patientDx', 'tbRegistrationId', 'tbRegistrationDate'],
+    description: 'Marked by anyone reviewing the case once test results are in. TB Registration ID + Date only apply when Dx = Confirmed TB +ve. The Care Provider referral question shows when Dx is Confirmed TB +ve or Indeterminate.',
+    fields: ['patientDx', 'tbRegistrationId', 'tbRegistrationDate', 'careProviderReferralCompleted'],
   },
   {
     title: 'TB Care Provider — follow-up',
@@ -331,6 +345,22 @@ function todayISO(): string {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+// v1.7.3 — flag when CXR=+ve or Xpert ∈ {T, TT, RR} but the Dx is set to
+// something other than "Confirmed TB +ve". Returns null if consistent or if
+// Dx is still pending (no contradiction yet).
+function getDxDiscrepancy(v: Record<string, string>): string | null {
+  const cxrPos = v.cxrResult === '+ve';
+  const xpertPos = ['T', 'TT', 'RR'].includes(v.xpertResult || '');
+  const testsPos = cxrPos || xpertPos;
+  if (!testsPos) return null;
+  if (!v.patientDx || v.patientDx === 'Pending') return null;
+  if (v.patientDx === 'Confirmed TB +ve') return null;
+  const cxrPart = cxrPos ? 'CXR Result = +ve' : '';
+  const xpertPart = xpertPos ? `Xpert Result = ${v.xpertResult}` : '';
+  const tests = [cxrPart, xpertPart].filter(Boolean).join(' and ');
+  return `${tests} indicates TB, but Patient Dx is set to "${v.patientDx}". Please verify before saving.`;
+}
+
 function isEditableBy(field: FieldConfig, role: UserRole): boolean {
   return field.editableBy === 'all' || field.editableBy.includes(role);
 }
@@ -358,9 +388,30 @@ export default function ScreeningReferralLogTable({
 }) {
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
   const [editValues, setEditValues] = useState<Record<string, string>>({});
+  // v1.7.3 — track the values at expand-time so we can detect unsaved changes.
+  const [initialValues, setInitialValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
   const expandedRowRef = useRef<HTMLTableRowElement | null>(null);
+
+  const dirty = useMemo(() => {
+    const keys = new Set([...Object.keys(editValues), ...Object.keys(initialValues)]);
+    for (const k of keys) {
+      if ((editValues[k] || '') !== (initialValues[k] || '')) return true;
+    }
+    return false;
+  }, [editValues, initialValues]);
+
+  // Warn the browser before unload if there are unsaved edits.
+  useEffect(() => {
+    if (!dirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [dirty]);
 
   const headers = data[0] || [];
   // v1.6.1 — drop empty rows (no screeningReferralId in column A). These
@@ -381,6 +432,7 @@ export default function ScreeningReferralLogTable({
       const values: Record<string, string> = {};
       FIELDS.forEach(f => { values[f.key] = row[f.col] || ''; });
       setEditValues(values);
+      setInitialValues(values);
       setTimeout(() => {
         expandedRowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }, 50);
@@ -413,17 +465,30 @@ export default function ScreeningReferralLogTable({
   const handleExpand = (rowIdx: number) => {
     if (!editable) return;
     if (expandedRow === rowIdx) {
+      // Collapsing the current row.
+      if (dirty && !window.confirm('You have unsaved changes on this record. Discard?')) return;
       setExpandedRow(null);
+      setEditValues({});
+      setInitialValues({});
       return;
     }
+    // Switching to a different row.
+    if (expandedRow !== null && dirty && !window.confirm('You have unsaved changes on the current record. Discard and open the next?')) return;
     setExpandedRow(rowIdx);
     const row = rows[rowIdx];
     const values: Record<string, string> = {};
     FIELDS.forEach(f => { values[f.key] = row[f.col] || ''; });
     setEditValues(values);
+    setInitialValues(values);
   };
 
   const handleSave = async (screeningReferralId: string) => {
+    // v1.7.3 — confirm the user wants to save a row whose Dx is
+    // inconsistent with the test results.
+    const discrepancy = getDxDiscrepancy(editValues);
+    if (discrepancy && !window.confirm(`⚠️ Discrepancy detected\n\n${discrepancy}\n\nClick OK to save anyway, or Cancel to fix.`)) {
+      return;
+    }
     setSaving(true);
     try {
       await fetch('/api/referral-log', {
@@ -437,6 +502,15 @@ export default function ScreeningReferralLogTable({
     }
     setSaving(false);
     setExpandedRow(null);
+    setEditValues({});
+    setInitialValues({});
+  };
+
+  const handleCancel = () => {
+    if (dirty && !window.confirm('Discard unsaved changes?')) return;
+    setExpandedRow(null);
+    setEditValues({});
+    setInitialValues({});
   };
 
   return (
@@ -527,7 +601,7 @@ export default function ScreeningReferralLogTable({
                   setEditValues={setEditValues}
                   onExpand={() => handleExpand(i)}
                   onSave={() => handleSave(row[0])}
-                  onCancel={() => setExpandedRow(null)}
+                  onCancel={handleCancel}
                   saving={saving}
                   statusLabel={status.label}
                   statusBadge={BUCKET_BADGE[status.bucket]}
@@ -569,6 +643,31 @@ function ScreeningReferralRow({
     }
   }, [isExpanded, editValues.removalReason, editValues.removedAt, setEditValues]);
 
+  // v1.7.3 — cxrResult set → cxrCompleted = Yes (if blank). Same for
+  // firstContactScreeningProviderDate → arrivedAtCenter = Yes.
+  useEffect(() => {
+    if (!isExpanded) return;
+    if (editValues.cxrResult && !editValues.cxrCompleted) {
+      setEditValues(prev => ({ ...prev, cxrCompleted: 'Yes' }));
+    }
+  }, [isExpanded, editValues.cxrResult, editValues.cxrCompleted, setEditValues]);
+
+  useEffect(() => {
+    if (!isExpanded) return;
+    if (editValues.xpertResult && !editValues.xpertCompleted) {
+      setEditValues(prev => ({ ...prev, xpertCompleted: 'Yes' }));
+    }
+  }, [isExpanded, editValues.xpertResult, editValues.xpertCompleted, setEditValues]);
+
+  useEffect(() => {
+    if (!isExpanded) return;
+    if (editValues.firstContactScreeningProviderDate && !editValues.arrivedAtCenter) {
+      setEditValues(prev => ({ ...prev, arrivedAtCenter: 'Yes' }));
+    }
+  }, [isExpanded, editValues.firstContactScreeningProviderDate, editValues.arrivedAtCenter, setEditValues]);
+
+  const dxDiscrepancy = getDxDiscrepancy(editValues);
+
   return (
     <>
       <tr
@@ -603,13 +702,20 @@ function ScreeningReferralRow({
               </div>
 
               {GROUPS.map(group => (
-                <FieldGroupBlock
-                  key={group.title}
-                  group={group}
-                  userRole={userRole}
-                  editValues={editValues}
-                  setEditValues={setEditValues}
-                />
+                <Fragment key={group.title}>
+                  {group.title === 'Final diagnosis' && dxDiscrepancy && (
+                    <div className="mb-3 p-3 bg-red-50 border border-red-300 rounded text-xs text-red-800 flex items-start gap-2">
+                      <span className="text-base leading-none">⚠️</span>
+                      <span><strong>Discrepancy:</strong> {dxDiscrepancy}</span>
+                    </div>
+                  )}
+                  <FieldGroupBlock
+                    group={group}
+                    userRole={userRole}
+                    editValues={editValues}
+                    setEditValues={setEditValues}
+                  />
+                </Fragment>
               ))}
 
               <div className="flex gap-2 mt-4">

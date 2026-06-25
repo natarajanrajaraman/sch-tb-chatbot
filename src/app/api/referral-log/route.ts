@@ -33,43 +33,95 @@ export async function PUT(request: NextRequest) {
         { status: 400 }
       );
     }
-    // v1.6 / v1.7 — Implicit derivations when Tele-Health activity is
-    // detected (contactAttempts incremented, or clientContacted just set
-    // to 'Yes'):
-    //   - snoozeUntil = today + 7d (unless explicitly set in this PUT) —
-    //     drops the row out of the overdue queue for a week.
-    //   - lastContactTelehealthDate = today (unless explicitly set).
-    //   - firstContactTelehealthDate = today (only if still blank).
+    // v1.6 / v1.7 — Implicit derivations when role-side activity is
+    // detected. Same shape per role:
+    //   - "last contact" date = today (unless explicitly set in this PUT)
+    //   - "first contact" date = today (only if currently blank)
+    // Tele-Health additionally gets a 7-day implicit snooze on activity.
     let snoozeUntil: string | undefined = body.snoozeUntil;
     let firstContactTelehealthDate: string | undefined = body.firstContactTelehealthDate;
     let lastContactTelehealthDate: string | undefined = body.lastContactTelehealthDate;
+    let firstContactScreeningProviderDate: string | undefined = body.firstContactScreeningProviderDate;
+    let lastContactScreeningProviderDate: string | undefined = body.lastContactScreeningProviderDate;
+    let firstContactCareProviderDate: string | undefined = body.firstContactCareProviderDate;
+    let lastContactCareProviderDate: string | undefined = body.lastContactCareProviderDate;
 
-    const needsImplicit =
-      body.contactAttempts !== undefined ||
-      body.clientContacted === 'Yes';
+    // Load the prev row once if we need it.
+    const needsTH =
+      body.contactAttempts !== undefined || body.clientContacted === 'Yes';
+    const needsSP =
+      body.arrivedAtCenter !== undefined ||
+      body.cxrCompleted !== undefined || body.cxrResult !== undefined ||
+      body.xpertCompleted !== undefined || body.xpertResult !== undefined ||
+      body.firstContactScreeningProviderDate !== undefined;
+    const needsCP =
+      body.firstContactCareProviderDate !== undefined ||
+      body.careProviderReferralCompleted !== undefined;
 
-    if (needsImplicit) {
+    if (needsTH || needsSP || needsCP) {
       const all = await getAllReferralLogs();
       const headers = all[0] || REFERRAL_LOG_HEADERS;
-      const caIdx = headers.findIndex(h => h === 'contactAttempts');
-      const clientContactedIdx = headers.findIndex(h => h === 'clientContacted');
-      const firstThIdx = headers.findIndex(h => h === 'firstContactTelehealthDate');
+      const colIdx = (n: string) => headers.findIndex(h => h === n);
       const row = all.slice(1).find(r => r[0] === id);
-      const prevAttempts = row ? parseInt((row[caIdx] || '0').trim(), 10) || 0 : 0;
-      const prevContacted = row ? (row[clientContactedIdx] || '').trim() : '';
-      const prevFirstTh = row ? (row[firstThIdx] || '').trim() : '';
+      const prev = (n: string) => row ? (row[colIdx(n)] || '').trim() : '';
 
-      const newAttempts = body.contactAttempts !== undefined
-        ? parseInt(String(body.contactAttempts), 10) || 0
-        : prevAttempts;
-      const attemptsBumped = newAttempts > prevAttempts;
-      const justContacted = body.clientContacted === 'Yes' && prevContacted !== 'Yes';
-      const activitySignal = attemptsBumped || justContacted;
+      // --- Tele-Health ---
+      if (needsTH) {
+        const prevAttempts = parseInt(prev('contactAttempts') || '0', 10) || 0;
+        const newAttempts = body.contactAttempts !== undefined
+          ? parseInt(String(body.contactAttempts), 10) || 0
+          : prevAttempts;
+        const attemptsBumped = newAttempts > prevAttempts;
+        const justContacted = body.clientContacted === 'Yes' && prev('clientContacted') !== 'Yes';
+        if (attemptsBumped || justContacted) {
+          if (snoozeUntil === undefined) snoozeUntil = todayPlusISO(IMPLICIT_SNOOZE_DAYS);
+          if (lastContactTelehealthDate === undefined) lastContactTelehealthDate = todayISO();
+          if (firstContactTelehealthDate === undefined && !prev('firstContactTelehealthDate')) {
+            firstContactTelehealthDate = todayISO();
+          }
+        }
+      }
 
-      if (activitySignal) {
-        if (snoozeUntil === undefined) snoozeUntil = todayPlusISO(IMPLICIT_SNOOZE_DAYS);
-        if (lastContactTelehealthDate === undefined) lastContactTelehealthDate = todayISO();
-        if (firstContactTelehealthDate === undefined && !prevFirstTh) firstContactTelehealthDate = todayISO();
+      // --- Screening Provider ---
+      // Activity if any SP test/arrival field is being SET (non-empty value
+      // that differs from prev), or if firstContactSP is being set fresh.
+      if (needsSP) {
+        const spChanged = (k: string) => {
+          const next = body[k];
+          if (next === undefined) return false;
+          const nextStr = String(next).trim();
+          return !!nextStr && nextStr !== prev(k);
+        };
+        const spActivity =
+          spChanged('arrivedAtCenter') ||
+          spChanged('cxrCompleted') || spChanged('cxrResult') ||
+          spChanged('xpertCompleted') || spChanged('xpertResult') ||
+          spChanged('firstContactScreeningProviderDate');
+        if (spActivity) {
+          if (lastContactScreeningProviderDate === undefined) lastContactScreeningProviderDate = todayISO();
+          if (firstContactScreeningProviderDate === undefined && !prev('firstContactScreeningProviderDate')) {
+            firstContactScreeningProviderDate = todayISO();
+          }
+        }
+      }
+
+      // --- Care Provider ---
+      if (needsCP) {
+        const cpChanged = (k: string) => {
+          const next = body[k];
+          if (next === undefined) return false;
+          const nextStr = String(next).trim();
+          return !!nextStr && nextStr !== prev(k);
+        };
+        const cpActivity =
+          cpChanged('firstContactCareProviderDate') ||
+          cpChanged('careProviderReferralCompleted');
+        if (cpActivity) {
+          if (lastContactCareProviderDate === undefined) lastContactCareProviderDate = todayISO();
+          if (firstContactCareProviderDate === undefined && !prev('firstContactCareProviderDate')) {
+            firstContactCareProviderDate = todayISO();
+          }
+        }
       }
     }
 
@@ -87,19 +139,22 @@ export async function PUT(request: NextRequest) {
       patientDx: body.patientDx,
       tbRegistrationId: body.tbRegistrationId,
       tbRegistrationDate: body.tbRegistrationDate,
-      // v1.5/v1.7 — 6 role-stamped contact dates. Tele-Health dates may be
-      // implicitly auto-stamped above when contact activity is detected.
+      // v1.5/v1.7 — 6 role-stamped contact dates. Each may be implicitly
+      // auto-stamped above when that role's activity is detected.
       firstContactTelehealthDate,
       lastContactTelehealthDate,
-      firstContactScreeningProviderDate: body.firstContactScreeningProviderDate,
-      lastContactScreeningProviderDate: body.lastContactScreeningProviderDate,
-      firstContactCareProviderDate: body.firstContactCareProviderDate,
-      lastContactCareProviderDate: body.lastContactCareProviderDate,
+      firstContactScreeningProviderDate,
+      lastContactScreeningProviderDate,
+      firstContactCareProviderDate,
+      lastContactCareProviderDate,
       // v1.6 — written + consumed by journey-state computation
       removalReason: body.removalReason,
       removedAt: body.removedAt,
       snoozeUntil,
       remarks: body.remarks,
+      // v1.7.3 — referral to TB Care Provider (Yes/No), gated UI-side
+      // on patientDx ∈ {Confirmed TB +ve, Indeterminate}.
+      careProviderReferralCompleted: body.careProviderReferralCompleted,
     });
     if (!success) {
       return NextResponse.json({ success: false, error: 'screeningReferralId not found' }, { status: 404 });

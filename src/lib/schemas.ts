@@ -21,6 +21,8 @@ export const REFERRAL_LOG_HEADERS = [
   'removalReason', 'removedAt', 'snoozeUntil',
   // AG
   'remarks',
+  // AH  (v1.7.3 — surfaced only when patientDx ∈ {Confirmed TB +ve, Indeterminate})
+  'careProviderReferralCompleted',
 ];
 
 export const CARE_REFERRAL_LOG_HEADERS = [
