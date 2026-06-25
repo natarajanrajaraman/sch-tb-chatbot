@@ -401,6 +401,40 @@ pipeline + escalation rules + KB source map. Production build should
 treat P3 as a separate microservice — different scale, different
 guardrails, different infrastructure cost profile.
 
+## 10b. P3 — bilingual LLM output (development mode only)
+
+**Status as of v0.9.1**: P3's system prompt instructs the LLM to emit
+its reply in **both Burmese and English**, separated by `===EN===`,
+so the debug-panel "English Translation" view stays useful during
+development and reviewer testing. The server splits the reply on the
+separator and returns `replyMm` + `replyEn`; the chat surface shows
+the Burmese half and the translation panel shows the English half.
+
+> **Cost note for production:** the dual-output prompt **roughly
+> doubles** the per-turn completion tokens compared to Burmese-only
+> output. That's an acceptable tradeoff during prototype validation
+> (lets reviewers and SCH clinicians audit what the bot is actually
+> saying), but it should be **switched off in production** to halve
+> the per-conversation token cost.
+>
+> **How to turn it off for production:**
+> 1. In `docs/p3-system-prompt.md`, remove the entire "Reply format —
+>    STRICT" block (the section that mandates the `===EN===`
+>    separator + English block).
+> 2. Leave the `<escalation level="..."/>` tag requirement in place —
+>    that's still load-bearing for routing.
+> 3. The server (`/api/p3/chat`) already falls back gracefully: if
+>    the LLM doesn't emit a `===EN===` separator, `parseEscalationTag`
+>    returns the full reply as `replyMm` and leaves `replyEn` empty,
+>    and the chat surface uses `replyMm` for everything.
+> 4. Consider hiding the English Translation toggle from the
+>    production debug panel (or just disabling it for the
+>    LANDING-choice-2 / P3 path).
+
+The dev/prod toggle is in the Markdown content, not in code, so SCH
+or ETC can decide per-deployment without a rebuild — just edit
+`docs/p3-system-prompt.md` and redeploy.
+
 ## 11. Comparison with the old SCH FB self-check bot (Jun 2022)
 
 See **`docs/FB-BOT-COMPARISON.md`** for the full diff. Key takeaways

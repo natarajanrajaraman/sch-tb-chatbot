@@ -5,7 +5,7 @@ import ChatWindow from '@/components/ChatWindow';
 import TranslationPanel from '@/components/TranslationPanel';
 import FeedbackPanel from '@/components/FeedbackPanel';
 import WorkflowFlowchart from '@/components/WorkflowFlowchart';
-import P3ChatPanel, { P3UsageSnapshot } from '@/components/p3/P3ChatPanel';
+import P3ChatPanel, { P3UsageSnapshot, P3Msg } from '@/components/p3/P3ChatPanel';
 import P3CostMeter from '@/components/p3/P3CostMeter';
 import P3DocLinks from '@/components/p3/P3DocLinks';
 import { DEFAULT_MODEL_ID } from '@/lib/p3/models';
@@ -36,6 +36,7 @@ export default function Home() {
   // P3 (Patient Info chatbot) state — surfaces in debug panel
   const [p3ModelId, setP3ModelId] = useState<string>(DEFAULT_MODEL_ID);
   const [p3ResetSignal, setP3ResetSignal] = useState(0);
+  const [p3Messages, setP3Messages] = useState<P3Msg[]>([]);
   const [p3Usage, setP3Usage] = useState<P3UsageSnapshot>({
     modelId: DEFAULT_MODEL_ID,
     totalPromptTokens: 0,
@@ -119,6 +120,7 @@ export default function Home() {
               modelId={p3ModelId}
               platformView={platform}
               onUsageChange={setP3Usage}
+              onMessagesChange={setP3Messages}
               onResetSignal={p3ResetSignal}
             />
           ) : (
@@ -221,7 +223,19 @@ export default function Home() {
 
               {translationOpen && (
                 <div className="flex-1 min-h-0 overflow-hidden">
-                  <TranslationPanel messages={messages} />
+                  <TranslationPanel
+                    messages={
+                      isP3Mode
+                        ? p3Messages.map(m => ({
+                            id: m.id,
+                            sender: (m.role === 'user' ? 'user' : 'bot') as 'user' | 'bot',
+                            textMm: m.textMm,
+                            textEn: m.textEn,
+                            timestamp: m.ts,
+                          }))
+                        : messages
+                    }
+                  />
                 </div>
               )}
             </div>

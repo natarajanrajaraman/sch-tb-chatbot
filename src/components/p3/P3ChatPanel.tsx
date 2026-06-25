@@ -7,10 +7,11 @@ import { DEFAULT_MODEL_ID } from '@/lib/p3/models';
 
 export type EscalationLevel = 'none' | 'nonurgent' | 'telehealth' | 'immediate';
 
-interface P3Msg {
+export interface P3Msg {
   id: string;
   role: 'user' | 'assistant';
-  text: string;
+  textMm: string;
+  textEn: string;
   ts: number;
   escalation?: EscalationLevel;
   careReferralId?: string;
@@ -31,10 +32,11 @@ interface P3ChatPanelProps {
   modelId: string;
   platformView: string;
   onUsageChange: (usage: P3UsageSnapshot) => void;
+  onMessagesChange?: (messages: P3Msg[]) => void;
   onResetSignal?: number;     // bump to reset the conversation
 }
 
-export default function P3ChatPanel({ theme, modelId, platformView, onUsageChange, onResetSignal }: P3ChatPanelProps) {
+export default function P3ChatPanel({ theme, modelId, platformView, onUsageChange, onMessagesChange, onResetSignal }: P3ChatPanelProps) {
   const [p3ConversationId, setP3ConversationId] = useState(() => `P3-${generateId()}`);
   const [messages, setMessages] = useState<P3Msg[]>([]);
   const [inputText, setInputText] = useState('');
@@ -72,10 +74,15 @@ export default function P3ChatPanel({ theme, modelId, platformView, onUsageChang
     });
   }, [onResetSignal, modelId]);
 
-  // Bubble usage up
+  // Bubble usage + messages up to the host page so TranslationPanel
+  // can render English alongside the Burmese chat.
   useEffect(() => {
     onUsageChange(totals);
   }, [totals, onUsageChange]);
+
+  useEffect(() => {
+    if (onMessagesChange) onMessagesChange(messages);
+  }, [messages, onMessagesChange]);
 
   // Scroll on new messages
   useEffect(() => {
@@ -88,7 +95,8 @@ export default function P3ChatPanel({ theme, modelId, platformView, onUsageChang
       setMessages([{
         id: generateId(),
         role: 'assistant',
-        text: 'မင်္ဂလာပါ! "နေ" ဆေးခန်း တီဘီ Chatbot မှ ကြိုဆိုပါသည်။ တီဘီရောဂါ ကုသမှု၊ ဆေးသောက်ပုံ၊ ဘေးထွက်ဆိုးကျိုးများ နှင့် ပြုစုစောင့်ရှောက်ခြင်းအကြောင်း မေးခွန်းများ မေးနိုင်ပါသည်။ မည်သို့ ကူညီပေးရမည်နည်း?',
+        textMm: 'မင်္ဂလာပါ! "နေ" ဆေးခန်း တီဘီ Chatbot မှ ကြိုဆိုပါသည်။ တီဘီရောဂါ ကုသမှု၊ ဆေးသောက်ပုံ၊ ဘေးထွက်ဆိုးကျိုးများ နှင့် ပြုစုစောင့်ရှောက်ခြင်းအကြောင်း မေးခွန်းများ မေးနိုင်ပါသည်။ မည်သို့ ကူညီပေးရမည်နည်း?',
+        textEn: 'Hello! Welcome to the Sun Clinic TB Chatbot. You can ask questions about TB treatment, taking medicine, side effects, and supportive care. How can I help you?',
         ts: Date.now(),
         escalation: 'none',
       }]);
@@ -99,11 +107,15 @@ export default function P3ChatPanel({ theme, modelId, platformView, onUsageChang
     setError(null);
     setIsTyping(true);
 
-    const userMsg: P3Msg = { id: generateId(), role: 'user', text: userText, ts: Date.now() };
+    // User-typed text is stored as-is in both surfaces — we don't
+    // translate the user's side. If they type Burmese, both show
+    // Burmese; if English, both show English.
+    const userMsg: P3Msg = { id: generateId(), role: 'user', textMm: userText, textEn: userText, ts: Date.now() };
     setMessages(prev => [...prev, userMsg]);
 
     // Build history payload (everything currently in state except the message we just added)
-    const historyPayload = messages.map(m => ({ role: m.role, content: m.text }));
+    // For the LLM context, we send the Burmese surface (which == user-typed for user turns).
+    const historyPayload = messages.map(m => ({ role: m.role, content: m.textMm }));
 
     try {
       const res = await fetch('/api/p3/chat', {
@@ -124,7 +136,8 @@ export default function P3ChatPanel({ theme, modelId, platformView, onUsageChang
       const replyMsg: P3Msg = {
         id: generateId(),
         role: 'assistant',
-        text: data.reply,
+        textMm: data.replyMm || data.reply || '',
+        textEn: data.replyEn || data.replyMm || data.reply || '',
         ts: Date.now(),
         escalation: data.escalation?.level || 'none',
         careReferralId: data.escalation?.careReferralId,
@@ -195,27 +208,29 @@ export default function P3ChatPanel({ theme, modelId, platformView, onUsageChang
     if (!pendingTbCaseIdPrompt) return;
     const txt = caseId.trim();
     setPendingTbCaseIdPrompt(null);
+    const userLabelMm = txt ? `TB Case ID: ${txt}` : 'TB Case ID ကို ကျော်ပါမည်';
+    const userLabelEn = txt ? `TB Case ID: ${txt}` : 'Skipped TB Case ID';
     setMessages(prev => [...prev, {
       id: generateId(),
       role: 'user',
-      text: txt ? `TB Case ID: ${txt}` : 'Skipped TB Case ID',
+      textMm: userLabelMm,
+      textEn: userLabelEn,
       ts: Date.now(),
     }]);
     if (txt) {
-      // Send a fresh turn to record the case ID (server overwrites the existing row's patientTbCaseId)
-      // Lightweight: PATCH-style call without an LLM round-trip would be cleaner; for prototype we
-      // just include it in the next chat turn naturally. For now we just acknowledge in-chat.
       setMessages(prev => [...prev, {
         id: generateId(),
         role: 'assistant',
-        text: `ကျေးဇူးတင်ပါသည်။ သင့်တီဘီ Case ID (${txt}) ကို "နေ" Tele-Health အဖွဲ့ထံ ပေးပို့ပြီးပါပြီ။`,
+        textMm: `ကျေးဇူးတင်ပါသည်။ သင့်တီဘီ Case ID (${txt}) ကို "နေ" Tele-Health အဖွဲ့ထံ ပေးပို့ပြီးပါပြီ။`,
+        textEn: `Thank you. Your TB Case ID (${txt}) has been shared with the Sun Tele-Health team.`,
         ts: Date.now(),
       }]);
     } else {
       setMessages(prev => [...prev, {
         id: generateId(),
         role: 'assistant',
-        text: 'ကောင်းပါပြီ။ TB Case ID မပါဘဲ ဆက်လက်ဆောင်ရွက်ပါမည်။ "နေ" Tele-Health အဖွဲ့မှ သင်ပေးထားသော ဆက်သွယ်ရန် နည်းလမ်းမှတဆင့် ဆက်သွယ်ပါမည်။',
+        textMm: 'ကောင်းပါပြီ။ TB Case ID မပါဘဲ ဆက်လက်ဆောင်ရွက်ပါမည်။ "နေ" Tele-Health အဖွဲ့မှ သင်ပေးထားသော ဆက်သွယ်ရန် နည်းလမ်းမှတဆင့် ဆက်သွယ်ပါမည်။',
+        textEn: 'Understood. We will proceed without a TB Case ID. The Sun Tele-Health team will reach you through the contact information you provided.',
         ts: Date.now(),
       }]);
     }
@@ -268,7 +283,7 @@ export default function P3ChatPanel({ theme, modelId, platformView, onUsageChang
                   wordBreak: 'break-word',
                 }}
               >
-                {msg.text}
+                {msg.textMm}
                 {msg.careReferralId && (
                   <div className="mt-2 text-[10px] opacity-80">
                     🩺 careReferralId: <code className="font-mono">{msg.careReferralId}</code>

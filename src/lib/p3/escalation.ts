@@ -25,16 +25,30 @@ export function maxLevel(a: EscalationLevel, b: EscalationLevel): EscalationLeve
 }
 
 // Strips the leading <escalation level="..."/> tag from the LLM
-// reply and returns both the level and the clean reply text. Falls
-// back to 'none' if the tag is missing or malformed.
-export function parseEscalationTag(rawReply: string): { level: EscalationLevel; cleanReply: string } {
+// reply and splits the body on `===EN===` into Burmese + English
+// halves. Falls back gracefully if the tag is missing or the
+// separator wasn't emitted.
+export function parseEscalationTag(rawReply: string): {
+  level: EscalationLevel;
+  replyMm: string;
+  replyEn: string;
+} {
+  let level: EscalationLevel = 'none';
+  let body = rawReply;
+
   const tagMatch = rawReply.match(/^\s*<escalation\s+level="(none|nonurgent|telehealth|immediate)"\s*\/?\s*>\s*\n?/i);
-  if (!tagMatch) {
-    return { level: 'none', cleanReply: rawReply.trim() };
+  if (tagMatch) {
+    level = tagMatch[1].toLowerCase() as EscalationLevel;
+    body = rawReply.slice(tagMatch[0].length);
   }
-  const level = tagMatch[1].toLowerCase() as EscalationLevel;
-  const cleanReply = rawReply.slice(tagMatch[0].length).trim();
-  return { level, cleanReply };
+
+  // Split on the bilingual separator. Tolerate leading/trailing whitespace
+  // and an optional newline before/after.
+  const parts = body.split(/\n\s*={2,}\s*EN\s*={2,}\s*\n/i);
+  const replyMm = (parts[0] || '').trim();
+  const replyEn = (parts[1] || '').trim();
+
+  return { level, replyMm, replyEn };
 }
 
 // Rule-based pre-check on the user's message. Returns the highest

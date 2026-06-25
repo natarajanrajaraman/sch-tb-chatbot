@@ -35,8 +35,12 @@ export async function POST(request: NextRequest) {
 
     const result = await callOpenRouter(modelId, messages);
 
-    // Strip the LLM's escalation tag
-    const { level: llmLevel, cleanReply } = parseEscalationTag(result.text);
+    // Strip the LLM's escalation tag + split into Burmese/English halves
+    const { level: llmLevel, replyMm, replyEn } = parseEscalationTag(result.text);
+    // If the LLM forgot the EN separator, fall back to the Burmese
+    // reply for both surfaces so the panel still shows something.
+    const finalReplyMm = replyMm || result.text.trim();
+    const finalReplyEn = replyEn || replyMm || result.text.trim();
 
     // Final level = max(LLM, rule-based)
     const finalLevel: EscalationLevel = maxLevel(preCheck.level, llmLevel);
@@ -79,7 +83,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      reply: cleanReply,
+      reply: finalReplyMm,            // legacy single-language reply
+      replyMm: finalReplyMm,
+      replyEn: finalReplyEn,
       escalation: {
         level: finalLevel,
         llmLevel,
