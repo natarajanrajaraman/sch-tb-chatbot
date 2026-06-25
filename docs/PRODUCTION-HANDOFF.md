@@ -511,8 +511,8 @@ These markers exist in the source — search for them on handoff:
 The SCH-facing user guide is a Google Doc on the work shared drive:
 
 - **Location:** `I:\Shared drives\Equitech Collective\PROJECTS\SCH - TB Project (FC-SDS Mm)\03_Discovery\SCH TB Chatbot [PROTOTYPE]\User Guide\SCH TB Chatbot Prototype — User Guide`
-- **Doc id:** `1VpZFdgYkqeL7VbHCcNt2P44xog-gAVkMJ3iy8FJKaRw`
-- **URL:** https://docs.google.com/document/d/1VpZFdgYkqeL7VbHCcNt2P44xog-gAVkMJ3iy8FJKaRw/edit
+- **Doc id:** `1wXgnv1K4DSmvIZUh4TSQ1sOZnO3vVobWc9ULZf_Khdk` (re-created in v1.5 — old id `1VpZFdgYkqeL7VbHCcNt2P44xog-gAVkMJ3iy8FJKaRw` is trashed)
+- **URL:** https://docs.google.com/document/d/1wXgnv1K4DSmvIZUh4TSQ1sOZnO3vVobWc9ULZf_Khdk/edit
 - **Audience:** SCH Admin, SCH Tele-Health, TB Screening Provider, TB Care Provider — many are non-native English speakers; keep wording short and direct.
 - **Repo source of truth:** `docs/USER-GUIDE.md`. The gdoc is rendered from this file; the file is what we version in git.
 
@@ -532,7 +532,8 @@ When you bump `BOT_VERSION` for a release that affects anything a user could not
 1. **Edit `docs/USER-GUIDE.md`** in this repo — update the version line at the top, add a row to the "Version history" table, and revise any section whose content changed.
 2. **Sync the AUTO block into the gdoc**. Two options:
    - **Quick (small change):** open the gdoc in the browser and edit it by hand, mirroring the repo file.
-   - **Full regen (after a larger change):** use `gog docs` to overwrite the block between the two `[BEGIN AUTO-MANAGED CONTENT]` / `[END AUTO-MANAGED CONTENT]` anchor lines. The first time we need this, build a small helper at `scripts/sync-user-guide.js` and add the run command here.
+   - **Full regen (after a larger change):** the proven path is `gog docs create --file docs/USER-GUIDE.md --parent <User-Guide-folder-id>` — this creates a fresh gdoc with proper markdown rendering. Then trash the old gdoc and update `USER_GUIDE_GDOC` in `src/components/p3/P3DocLinks.tsx` + the §14 doc-id reference here. (`gog docs find-replace --format markdown` on the existing doc stalls at ~16KB of content — known tooling limitation; build `scripts/sync-user-guide.js` against the Docs API directly if in-place sync becomes important. Once that script exists, drop these create/trash steps.)
+   - **TODO (v1.6+):** build `scripts/sync-user-guide.js` to do in-place sync between markers via the Docs API. This would preserve the doc id across version bumps so the dev-panel link doesn't churn.
 3. **Do not touch anything below the `[END AUTO-MANAGED CONTENT]` marker.** That section ("Your notes") is Raj's hand-edited area and must survive every update.
 
 ### What goes in the AUTO section vs the notes section

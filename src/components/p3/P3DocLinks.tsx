@@ -7,10 +7,12 @@
 const REPO_BASE = 'https://github.com/natarajanrajaraman/sch-tb-chatbot/blob/master';
 
 // SCH-facing user guide lives on the shared drive (raj@equity.tech).
-// Engineers update the source at docs/USER-GUIDE.md and sync the AUTO
-// section into this gdoc — see docs/PRODUCTION-HANDOFF.md "User guide
-// maintenance".
-const USER_GUIDE_GDOC = 'https://docs.google.com/document/d/1VpZFdgYkqeL7VbHCcNt2P44xog-gAVkMJ3iy8FJKaRw/edit';
+// Engineers update the source at docs/USER-GUIDE.md and sync into this
+// gdoc on each version bump — see docs/PRODUCTION-HANDOFF.md §14 "User
+// guide maintenance".
+// v1.5: recreated under a new doc id after gog markdown find-replace
+// stalled on 16KB content; the proven path is `gog docs create --file`.
+const USER_GUIDE_GDOC = 'https://docs.google.com/document/d/1wXgnv1K4DSmvIZUh4TSQ1sOZnO3vVobWc9ULZf_Khdk/edit';
 
 type Link = { label: string; href: string; tag?: string };
 
