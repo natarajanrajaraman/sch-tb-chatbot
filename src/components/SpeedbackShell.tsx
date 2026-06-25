@@ -28,11 +28,16 @@ interface SpeedbackShellProps {
   children: ReactNode;
 }
 
+// v1.7.1 — emoji choices per Raj's spec:
+//   admin             — bespectacled person (closest single glyph: 🤓)
+//   tele-health       — headset (🎧)
+//   screening provider — chest X-ray (🩻; Unicode 14, may render as fallback box on older OSes)
+//   care provider     — stethoscope (🩺)
 const NAV_ITEMS = [
-  { key: 'admin' as const, label: 'SCH Admin', icon: '⚙️', href: '/admin' },
-  { key: 'telehealth' as const, label: 'Telehealth', icon: '📊', href: '/telehealth' },
-  { key: 'screening-provider' as const, label: 'Screening Provider', icon: '🏥', href: '/screening-provider' },
-  { key: 'care-provider' as const, label: 'Care Provider', icon: '🤝', href: '/care-provider' },
+  { key: 'admin' as const, label: 'SCH Admin', icon: '🤓', href: '/admin' },
+  { key: 'telehealth' as const, label: 'Tele-Health', icon: '🎧', href: '/telehealth' },
+  { key: 'screening-provider' as const, label: 'Screening Provider', icon: '🩻', href: '/screening-provider' },
+  { key: 'care-provider' as const, label: 'Care Provider', icon: '🩺', href: '/care-provider' },
 ];
 
 export default function SpeedbackShell({ title, subtitle, activeView, rightActions, search, children }: SpeedbackShellProps) {

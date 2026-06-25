@@ -12,7 +12,7 @@ type TabType = 'dashboard' | 'screening' | 'care' | 'alerts';
 
 export default function TelehealthPage() {
   return (
-    <AuthGate roleKey="sch-telehealth" roleLabel="SCH Telehealth View">
+    <AuthGate roleKey="sch-telehealth" roleLabel="SCH Tele-Health View">
       <TelehealthInner />
     </AuthGate>
   );
@@ -67,7 +67,7 @@ function TelehealthInner() {
 
   return (
     <SpeedbackShell
-      title="SCH Telehealth"
+      title="SCH Tele-Health"
       activeView="telehealth"
       rightActions={
         <>

@@ -286,7 +286,7 @@ export default function Home() {
                     title="SCH Tele-Health team's dashboard. Tabbed: Screening Referral Log + Care Referral Log, both editable."
                     className="block w-full px-2 py-1 bg-gray-700/50 text-gray-200 text-[10px] font-medium rounded hover:bg-gray-700 text-center"
                   >
-                    SCH Telehealth View
+                    SCH Tele-Health View
                   </a>
                   <a
                     href="/screening-provider"

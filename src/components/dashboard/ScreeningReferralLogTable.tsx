@@ -246,9 +246,16 @@ const GROUPS: FieldGroup[] = [
 
 // v1.6 — Bucket counts come from computeSelfCheckJourney (in journeyState.ts).
 // The badge for an in-progress row that's snoozed gets the "Snoozed" affordance.
-// v1.7 — describe the row in terms of what's DONE and what's WAITING. Reads
-// as "Completed X, Awaiting Y" rather than the misleading "Reached TB
-// Screening Provider" when the patient has not actually reached one yet.
+// v1.7.1 — numbered state labels per Raj's spec:
+//   1a — Self-Check completed, pending Assisted Referral
+//   1b — Self-Check completed, pending Self-Referral TB Screening
+//   2  — Assisted Referral completed, pending TB Screening
+//   3  — TB Screening Provider Reached  (awaiting Dx)
+//   4  — Diagnosis NoTB, Exited          (terminal, counted as completed)
+//   5  — Diagnosis TB, pending TB Care Provider
+//   6  — TB Care Provider Reached
+//
+// Overdue prefixes the state. Snooze is appended.
 function statusFor(row: string[], headers: string[]): {
   bucket: OverallBucket;
   label: string;
@@ -258,45 +265,58 @@ function statusFor(row: string[], headers: string[]): {
   if (j.bucket === 'abandoned') {
     return { bucket: 'abandoned', label: `Abandoned · ${j.removalReason}`, isSnoozed: false };
   }
-  if (j.bucket === 'completed') {
-    return { bucket: 'completed', label: 'Pathway complete', isSnoozed: false };
+
+  const findStage = (k: string) => j.stages.find(s => s.key === k);
+  const thContact = findStage('th-contact');
+  const reachedSp = findStage('reached-sp');
+  const dxMarked = findStage('dx-marked');
+  const reachedCp = findStage('reached-cp');
+
+  const referralTypeIdx = headers.indexOf('referralType');
+  const patientDxIdx = headers.indexOf('patientDx');
+  const referralType = referralTypeIdx >= 0 ? (row[referralTypeIdx] || '').trim() : '';
+  const patientDx = patientDxIdx >= 0 ? (row[patientDxIdx] || '').trim() : '';
+  const isAssisted = referralType === 'Assisted';
+
+  let stateLabel: string;
+  let bucket: OverallBucket = j.bucket;
+
+  if (reachedCp?.status === 'completed') {
+    stateLabel = '6. TB Care Provider Reached';
+    bucket = 'completed';
+  } else if (dxMarked?.status === 'completed' && patientDx === 'Confirmed TB +ve') {
+    stateLabel = '5. Diagnosis TB, pending TB Care Provider';
+    if (bucket !== 'overdue') bucket = 'in-progress';
+  } else if (dxMarked?.status === 'completed' && patientDx === 'Confirmed TB -ve') {
+    stateLabel = '4. Diagnosis NoTB, Exited';
+    bucket = 'completed';
+  } else if (reachedSp?.status === 'completed') {
+    stateLabel = '3. TB Screening Provider Reached';
+    if (bucket !== 'overdue') bucket = 'in-progress';
+  } else if (isAssisted && thContact?.status === 'completed') {
+    stateLabel = '2. Assisted Referral completed, pending TB Screening';
+    if (bucket !== 'overdue') bucket = 'in-progress';
+  } else if (isAssisted) {
+    stateLabel = '1a. Self-Check completed, pending Assisted Referral';
+    if (bucket !== 'overdue') bucket = 'not-started';
+  } else {
+    stateLabel = '1b. Self-Check completed, pending Self-Referral TB Screening';
+    if (bucket !== 'overdue') bucket = 'not-started';
   }
 
-  // Find the last completed applicable stage + the next pending one.
-  const applicable = j.stages.filter(s => s.status !== 'not-applicable');
-  let lastCompleted: typeof j.stages[number] | undefined;
-  let nextPending: typeof j.stages[number] | undefined;
-  for (const s of applicable) {
-    if (s.status === 'completed') lastCompleted = s;
-    else if (!nextPending && (s.status === 'in-progress' || s.status === 'not-started' || s.status === 'overdue')) {
-      nextPending = s;
-    }
+  // Overdue: prefix with the overdue stage's age
+  if (bucket === 'overdue') {
+    const overdueStage = j.stages.find(s => s.status === 'overdue');
+    const days = overdueStage?.ageDays;
+    stateLabel = `⚠ Overdue (${days != null ? days + 'd' : '?'}) · ${stateLabel}`;
   }
-  const completedPhrase = lastCompleted?.completedPhrase
-    || (lastCompleted ? `Completed ${lastCompleted.label}` : '');
-  const awaitingPhrase = nextPending?.awaitingPhrase
-    || (nextPending ? `Awaiting ${nextPending.label}` : '');
 
-  if (j.bucket === 'overdue') {
-    const days = nextPending?.ageDays ?? '?';
-    const base = completedPhrase && awaitingPhrase
-      ? `${completedPhrase}, ${awaitingPhrase}`
-      : (awaitingPhrase || 'Overdue');
-    return { bucket: 'overdue', label: `${base} (${days}d, overdue)`, isSnoozed: false };
+  // Snooze suffix
+  if (j.isSnoozed) {
+    stateLabel = `${stateLabel} · snoozed to ${j.snoozedUntil}`;
   }
-  if (j.bucket === 'in-progress') {
-    const base = completedPhrase && awaitingPhrase
-      ? `${completedPhrase}, ${awaitingPhrase}`
-      : (awaitingPhrase || completedPhrase || 'In progress');
-    const suffix = j.isSnoozed ? ` · snoozed to ${j.snoozedUntil}` : '';
-    return { bucket: 'in-progress', label: `${base}${suffix}`, isSnoozed: j.isSnoozed };
-  }
-  // not-started
-  return {
-    bucket: 'not-started',
-    label: awaitingPhrase || BUCKET_LABEL['not-started'],
-    isSnoozed: false,
-  };
+
+  return { bucket, label: stateLabel, isSnoozed: j.isSnoozed };
 }
 
 function todayISO(): string {

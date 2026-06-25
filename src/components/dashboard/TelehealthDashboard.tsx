@@ -117,7 +117,7 @@ export default function TelehealthDashboard({ screeningData, careData, alertsDat
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h2 className="text-lg font-bold text-gray-800">Telehealth Dashboard</h2>
+        <h2 className="text-lg font-bold text-gray-800">SCH Tele-Health Dashboard</h2>
         <div className="flex items-center gap-3 text-[11px] text-slate-500">
           <span>{overdueQueue.length} overdue · {openAlerts} open alerts</span>
         </div>
