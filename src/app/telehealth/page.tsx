@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import AuthGate from '@/components/AuthGate';
+import SpeedbackShell from '@/components/SpeedbackShell';
 import ScreeningReferralLogTable from '@/components/dashboard/ScreeningReferralLogTable';
 import CareReferralLogTable from '@/components/dashboard/CareReferralLogTable';
 import AlertsLogTable from '@/components/dashboard/AlertsLogTable';
@@ -23,6 +24,9 @@ function TelehealthInner() {
   const [care, setCare] = useState<string[][]>([]);
   const [alerts, setAlerts] = useState<string[][]>([]);
   const [loading, setLoading] = useState(true);
+  // When the dashboard wants to deep-link to a specific row in one of the
+  // log tabs (so the click-target row auto-expands), it sets this id.
+  const [expandRecordId, setExpandRecordId] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -58,46 +62,49 @@ function TelehealthInner() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <div className="bg-gray-800 text-white px-6 py-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-bold">SCH Telehealth View — SCH TB Chatbot</h1>
-          <p className="text-xs text-gray-400">View + edit screening referrals, care referrals, and red-flag alerts.</p>
-        </div>
-        <div className="flex items-center gap-3">
+    <SpeedbackShell
+      title="SCH Telehealth"
+      subtitle="View + edit screening referrals, care referrals, and red-flag alerts."
+      activeView="telehealth"
+      rightActions={
+        <>
           <button
             onClick={fetchData}
-            className="px-3 py-1.5 bg-blue-600 text-white text-xs rounded-md hover:bg-blue-700"
+            className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 shadow-sm"
           >
             🔄 Refresh
           </button>
-          <a href="/" className="px-3 py-1.5 bg-gray-600 text-white text-xs rounded-md hover:bg-gray-500">
+          <a
+            href="/"
+            className="px-3 py-1.5 bg-white text-slate-700 text-xs font-medium border border-slate-200 rounded-lg hover:bg-slate-50"
+          >
             ← Back to Chat
           </a>
-        </div>
-      </div>
-
-      <div className="bg-white border-b px-6 flex gap-0">
+        </>
+      }
+    >
+      {/* Tabs row */}
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm mb-4 px-2 flex gap-0 overflow-x-auto">
         {tabs.map(t => (
           <button
             key={t.id}
             onClick={() => setActiveTab(t.id)}
-            className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
+            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${
               activeTab === t.id
                 ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
             }`}
           >
             <span>{t.icon}</span>
             <span>{t.label}</span>
             {t.badge != null && t.badge > 0 && (
-              <span className="ml-1 px-1.5 py-0.5 bg-red-500 text-white text-[10px] rounded">{t.badge}</span>
+              <span className="ml-1 px-1.5 py-0.5 bg-red-500 text-white text-[10px] rounded-full font-semibold">{t.badge}</span>
             )}
           </button>
         ))}
       </div>
 
-      <div className="p-6">
+      <div>
         {loading ? (
           <div className="text-center py-12 text-gray-500">Loading data…</div>
         ) : activeTab === 'dashboard' ? (
@@ -106,15 +113,37 @@ function TelehealthInner() {
             careData={care}
             alertsData={alerts}
             onJumpToTab={setActiveTab}
+            onJumpToRecord={(tab, recordId) => {
+              setActiveTab(tab);
+              setExpandRecordId(recordId);
+            }}
           />
         ) : activeTab === 'screening' ? (
-          <ScreeningReferralLogTable data={screening} onRefresh={fetchData} editable={true} />
+          <ScreeningReferralLogTable
+            data={screening}
+            onRefresh={fetchData}
+            editable={true}
+            expandRecordId={expandRecordId}
+            onExpandHandled={() => setExpandRecordId(null)}
+          />
         ) : activeTab === 'care' ? (
-          <CareReferralLogTable data={care} onRefresh={fetchData} editable={true} />
+          <CareReferralLogTable
+            data={care}
+            onRefresh={fetchData}
+            editable={true}
+            expandRecordId={expandRecordId}
+            onExpandHandled={() => setExpandRecordId(null)}
+          />
         ) : (
-          <AlertsLogTable data={alerts} onRefresh={fetchData} editable={true} />
+          <AlertsLogTable
+            data={alerts}
+            onRefresh={fetchData}
+            editable={true}
+            expandRecordId={expandRecordId}
+            onExpandHandled={() => setExpandRecordId(null)}
+          />
         )}
       </div>
-    </div>
+    </SpeedbackShell>
   );
 }

@@ -195,7 +195,7 @@ export async function saveReferralLog(
   screeningId: string
 ): Promise<void> {
   const timestamp = new Date().toISOString();
-  await appendToSheet('Referral Log', [
+  await appendToSheet('Screening Referral Log', [
     [screeningReferralId, conversationId, timestamp, clientName, clientAge, clientGender, referralType, township, facilityNames, 'Yes', status, screeningId],
   ]);
 }
@@ -272,7 +272,7 @@ export async function updateReferralLogFollowUp(
   screeningReferralId: string,
   followUp: ReferralFollowUp
 ): Promise<boolean> {
-  const allData = await getSheetValues('Referral Log', 'A1:AB2000');
+  const allData = await getSheetValues('Screening Referral Log', 'A1:AB2000');
   const rowIndex = allData.findIndex(row => row[0] === screeningReferralId);
   if (rowIndex < 0) return false;
 
@@ -288,13 +288,13 @@ export async function updateReferralLogFollowUp(
     if (next !== undefined) return next;
     return existingRow[headerIdx] || '';
   })];
-  await updateSheetCells('Referral Log', `M${sheetRow}:AB${sheetRow}`, values);
+  await updateSheetCells('Screening Referral Log', `M${sheetRow}:AB${sheetRow}`, values);
   return true;
 }
 
 export async function getAllReferralLogs(): Promise<string[][]> {
   try {
-    return await getSheetValues('Referral Log', 'A1:AB2000');
+    return await getSheetValues('Screening Referral Log', 'A1:AB2000');
   } catch {
     return [];
   }
@@ -448,7 +448,7 @@ export interface P3ConversationRow {
 }
 
 export async function upsertP3Conversation(row: P3ConversationRow): Promise<void> {
-  const allData = await getSheetValues('P3 Conversations', 'A1:M5000').catch(() => []);
+  const allData = await getSheetValues('AI Conversations', 'A1:M5000').catch(() => []);
   const headers = allData[0] || P3_CONVERSATIONS_HEADERS;
   const idx = allData.findIndex((r, i) => i > 0 && r[0] === row.p3ConversationId);
   const ordered = P3_CONVERSATIONS_HEADERS.map(h => {
@@ -458,9 +458,9 @@ export async function upsertP3Conversation(row: P3ConversationRow): Promise<void
   if (idx >= 0) {
     // Update existing row
     const sheetRow = idx + 1;
-    await updateSheetCells('P3 Conversations', `A${sheetRow}:${columnLetter(headers.length || P3_CONVERSATIONS_HEADERS.length)}${sheetRow}`, [ordered]);
+    await updateSheetCells('AI Conversations', `A${sheetRow}:${columnLetter(headers.length || P3_CONVERSATIONS_HEADERS.length)}${sheetRow}`, [ordered]);
   } else {
-    await appendToSheet('P3 Conversations', [ordered]);
+    await appendToSheet('AI Conversations', [ordered]);
   }
 }
 
@@ -477,7 +477,7 @@ function columnLetter(n: number): string {
 
 export async function getAllP3Conversations(): Promise<string[][]> {
   try {
-    return await getSheetValues('P3 Conversations', 'A1:M5000');
+    return await getSheetValues('AI Conversations', 'A1:M5000');
   } catch {
     return [];
   }

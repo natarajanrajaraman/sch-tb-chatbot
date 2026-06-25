@@ -155,14 +155,14 @@ export default function Home() {
         </button>
       </div>
 
-      {/* Toggle tab for debug panel */}
+      {/* Toggle tab for dev panel (was: debug) */}
       <button
         onClick={() => setDebugPanelOpen(!debugPanelOpen)}
         className="absolute top-1/2 -translate-y-1/2 right-0 z-30 bg-yellow-400/80 text-yellow-900/70 px-1 py-3 text-[9px] font-bold rounded-l hover:bg-yellow-400 transition-colors"
         style={{ writingMode: 'vertical-rl', right: debugPanelOpen ? '320px' : '0' }}
-        title={debugPanelOpen ? 'Close the debug / tester panel' : 'Open the debug / tester panel (model picker, cost meter, dashboards, KB)'}
+        title={debugPanelOpen ? 'Close the Dev / tester panel' : 'Open the Dev / tester panel (model picker, cost meter, dashboards, KB)'}
       >
-        {debugPanelOpen ? 'CLOSE' : 'DEBUG'}
+        {debugPanelOpen ? 'CLOSE' : 'DEV'}
       </button>
 
       {/* RIGHT: Debug panel */}

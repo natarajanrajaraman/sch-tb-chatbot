@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { downloadCSV } from './DataTable';
 import TranscriptLink from './TranscriptLink';
 
@@ -85,15 +85,20 @@ export default function ScreeningReferralLogTable({
   data,
   onRefresh,
   editable = true,
+  expandRecordId,
+  onExpandHandled,
 }: {
   data: string[][];
   onRefresh: () => void;
   editable?: boolean;
+  expandRecordId?: string | null;
+  onExpandHandled?: () => void;
 }) {
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
   const [editValues, setEditValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
+  const expandedRowRef = useRef<HTMLTableRowElement | null>(null);
 
   if (data.length === 0) {
     return <div className="text-center py-12 text-gray-400">No screening referral log data yet.</div>;
@@ -101,6 +106,26 @@ export default function ScreeningReferralLogTable({
 
   const headers = data[0] || [];
   const allRows = data.slice(1);
+
+  // Auto-expand a record when the parent (Dashboard click) sets expandRecordId.
+  // Clears the parent's flag once handled so subsequent manual collapses stick.
+  useEffect(() => {
+    if (!expandRecordId) return;
+    const idx = allRows.findIndex(r => r[0] === expandRecordId);
+    if (idx >= 0) {
+      setExpandedRow(idx);
+      const row = allRows[idx];
+      const values: Record<string, string> = {};
+      FOLLOW_UP_FIELDS.forEach(f => { values[f.key] = row[f.col] || ''; });
+      setEditValues(values);
+      // Scroll into view after the row paints
+      setTimeout(() => {
+        expandedRowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 50);
+    }
+    if (onExpandHandled) onExpandHandled();
+  }, [expandRecordId, allRows, onExpandHandled]);
+
   const q = search.trim().toLowerCase();
   // Column 0 = screeningReferralId, column 3 = clientName
   const rows = q
@@ -229,6 +254,7 @@ export default function ScreeningReferralLogTable({
                   slaLabel={sla.label}
                   slaBadge={SLA_BADGE_COLOR[sla.status]}
                   rowBg={rowBg}
+                  rowRef={expandedRow === i ? expandedRowRef : undefined}
                 />
               );
             })}
@@ -241,7 +267,7 @@ export default function ScreeningReferralLogTable({
 
 function ScreeningReferralRow({
   row, headers, isExpanded, editable, editValues, setEditValues, onExpand, onSave, onCancel, saving,
-  slaLabel, slaBadge, rowBg,
+  slaLabel, slaBadge, rowBg, rowRef,
 }: {
   row: string[];
   headers: string[];
@@ -256,10 +282,12 @@ function ScreeningReferralRow({
   slaLabel: string;
   slaBadge: string;
   rowBg: string;
+  rowRef?: React.Ref<HTMLTableRowElement>;
 }) {
   return (
     <>
       <tr
+        ref={rowRef}
         onClick={onExpand}
         className={`border-b transition-colors ${editable ? 'cursor-pointer' : ''} ${isExpanded ? 'bg-blue-50' : `${rowBg} hover:bg-gray-50`}`}
       >

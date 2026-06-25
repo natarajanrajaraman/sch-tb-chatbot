@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import AuthGate from '@/components/AuthGate';
+import SpeedbackShell from '@/components/SpeedbackShell';
 import CareReferralLogTable from '@/components/dashboard/CareReferralLogTable';
 
 export default function CareProviderPage() {
@@ -33,31 +34,32 @@ function CareProviderInner() {
   }, [fetchData]);
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <div className="bg-gray-800 text-white px-6 py-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-bold">TB Care Provider View — SCH TB Chatbot</h1>
-          <p className="text-xs text-gray-400">View and edit care referrals routed from the chatbot.</p>
-        </div>
-        <div className="flex items-center gap-3">
+    <SpeedbackShell
+      title="TB Care Provider"
+      subtitle="View + edit the Care Referral Log."
+      activeView="care-provider"
+      rightActions={
+        <>
           <button
             onClick={fetchData}
-            className="px-3 py-1.5 bg-blue-600 text-white text-xs rounded-md hover:bg-blue-700"
+            className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 shadow-sm"
           >
             🔄 Refresh
           </button>
-          <a href="/" className="px-3 py-1.5 bg-gray-600 text-white text-xs rounded-md hover:bg-gray-500">
+          <a
+            href="/"
+            className="px-3 py-1.5 bg-white text-slate-700 text-xs font-medium border border-slate-200 rounded-lg hover:bg-slate-50"
+          >
             ← Back to Chat
           </a>
-        </div>
-      </div>
-      <div className="p-6">
-        {loading ? (
-          <div className="text-center py-12 text-gray-500">Loading data…</div>
-        ) : (
-          <CareReferralLogTable data={data} onRefresh={fetchData} editable={true} />
-        )}
-      </div>
-    </div>
+        </>
+      }
+    >
+      {loading ? (
+        <div className="text-center py-12 text-slate-500">Loading data…</div>
+      ) : (
+        <CareReferralLogTable data={data} onRefresh={fetchData} editable={true} />
+      )}
+    </SpeedbackShell>
   );
 }

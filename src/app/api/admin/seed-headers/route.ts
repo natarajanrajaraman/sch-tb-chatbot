@@ -11,7 +11,7 @@ const SPEC = [
     headers: ['feedbackId', 'conversationId', 'timestamp', 'feedbackText', 'platformView', 'snapshot'],
   },
   {
-    sheetName: 'Referral Log',
+    sheetName: 'Screening Referral Log',
     headers: REFERRAL_LOG_HEADERS,
   },
   {
@@ -33,7 +33,7 @@ const SPEC = [
     headers: CARE_REFERRAL_LOG_HEADERS,
   },
   {
-    sheetName: 'P3 Conversations',
+    sheetName: 'AI Conversations',
     headers: P3_CONVERSATIONS_HEADERS,
   },
   {

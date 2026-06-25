@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { downloadCSV } from './DataTable';
 import TranscriptLink from './TranscriptLink';
 
@@ -20,15 +20,20 @@ export default function CareReferralLogTable({
   data,
   onRefresh,
   editable = true,
+  expandRecordId,
+  onExpandHandled,
 }: {
   data: string[][];
   onRefresh: () => void;
   editable?: boolean;
+  expandRecordId?: string | null;
+  onExpandHandled?: () => void;
 }) {
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
   const [editValues, setEditValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
+  const expandedRowRef = useRef<HTMLTableRowElement | null>(null);
 
   if (data.length === 0) {
     return (
@@ -40,6 +45,23 @@ export default function CareReferralLogTable({
 
   const headers = data[0] || [];
   const allRows = data.slice(1);
+
+  useEffect(() => {
+    if (!expandRecordId) return;
+    const idx = allRows.findIndex(r => r[0] === expandRecordId);
+    if (idx >= 0) {
+      setExpandedRow(idx);
+      const row = allRows[idx];
+      const values: Record<string, string> = {};
+      EDITABLE_FIELDS.forEach(f => { values[f.key] = row[f.col] || ''; });
+      setEditValues(values);
+      setTimeout(() => {
+        expandedRowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 50);
+    }
+    if (onExpandHandled) onExpandHandled();
+  }, [expandRecordId, allRows, onExpandHandled]);
+
   const q = search.trim().toLowerCase();
   // Column 0 = careReferralId, column 3 = clientName
   const rows = q
@@ -131,6 +153,7 @@ export default function CareReferralLogTable({
               <>
                 <tr
                   key={`row-${i}`}
+                  ref={expandedRow === i ? expandedRowRef : undefined}
                   onClick={() => handleExpand(i)}
                   className={`border-b transition-colors ${editable ? 'cursor-pointer' : ''} ${expandedRow === i ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
                 >

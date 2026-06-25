@@ -8,7 +8,7 @@ interface Outstanding {
   id: string;
   conversationId: string;
   clientName: string;
-  type: 'S' | 'C';
+  type: 'S' | 'C' | 'A';   // S = Screening, C = Care, A = Alert
   bucket: SlaBucket;
   daysSinceLastAction: number | null;
   lastActionLabel: string;
@@ -19,6 +19,7 @@ interface TelehealthDashboardProps {
   careData: string[][];
   alertsData: string[][];
   onJumpToTab: (tab: 'screening' | 'care' | 'alerts') => void;
+  onJumpToRecord?: (tab: 'screening' | 'care' | 'alerts', recordId: string) => void;
 }
 
 const SLA_LABEL: Record<SlaBucket, string> = {
@@ -105,7 +106,7 @@ function classifyCareRow(row: string[], headers: string[]): { bucket: SlaBucket;
   return { bucket: 'fresh', days, label: `${days}d — ${status}` };
 }
 
-export default function TelehealthDashboard({ screeningData, careData, alertsData, onJumpToTab }: TelehealthDashboardProps) {
+export default function TelehealthDashboard({ screeningData, careData, alertsData, onJumpToTab, onJumpToRecord }: TelehealthDashboardProps) {
   const [sortBy, setSortBy] = useState<'urgency' | 'oldest' | 'newest' | 'name'>('urgency');
 
   const { outstanding, slaCounts, openAlerts } = useMemo(() => {
@@ -142,14 +143,14 @@ export default function TelehealthDashboard({ screeningData, careData, alertsDat
       });
     }
 
-    const counts: Record<SlaBucket, { total: number; S: number; C: number }> = {
-      past_sla: { total: 0, S: 0, C: 0 },
-      last_fu_due: { total: 0, S: 0, C: 0 },
-      first_fu_due: { total: 0, S: 0, C: 0 },
-      awaiting_first: { total: 0, S: 0, C: 0 },
-      resolved_recent: { total: 0, S: 0, C: 0 },
-      lost: { total: 0, S: 0, C: 0 },
-      fresh: { total: 0, S: 0, C: 0 },
+    const counts: Record<SlaBucket, { total: number; S: number; C: number; A: number }> = {
+      past_sla: { total: 0, S: 0, C: 0, A: 0 },
+      last_fu_due: { total: 0, S: 0, C: 0, A: 0 },
+      first_fu_due: { total: 0, S: 0, C: 0, A: 0 },
+      awaiting_first: { total: 0, S: 0, C: 0, A: 0 },
+      resolved_recent: { total: 0, S: 0, C: 0, A: 0 },
+      lost: { total: 0, S: 0, C: 0, A: 0 },
+      fresh: { total: 0, S: 0, C: 0, A: 0 },
     };
     for (const o of result) {
       counts[o.bucket].total += 1;
@@ -197,7 +198,15 @@ export default function TelehealthDashboard({ screeningData, careData, alertsDat
   );
 
   const queueRow = (o: Outstanding) => (
-    <tr key={`${o.type}-${o.id}`} className={`border-b ${SLA_BG[o.bucket]} cursor-pointer`} onClick={() => onJumpToTab(o.type === 'S' ? 'screening' : 'care')}>
+    <tr
+      key={`${o.type}-${o.id}`}
+      className={`border-b ${SLA_BG[o.bucket]} cursor-pointer`}
+      onClick={() => {
+        const target = o.type === 'S' ? 'screening' : 'care';
+        if (onJumpToRecord) onJumpToRecord(target, o.id);
+        else onJumpToTab(target);
+      }}
+    >
       <td className="px-3 py-2 font-mono text-[11px]">{o.id}</td>
       <td className="px-3 py-2">{o.clientName}</td>
       <td className="px-3 py-2"><span className={`px-1.5 py-0.5 text-[10px] rounded ${o.type === 'S' ? 'bg-sky-100 text-sky-800' : 'bg-violet-100 text-violet-800'}`}>{o.type === 'S' ? 'Screening' : 'Care'}</span></td>

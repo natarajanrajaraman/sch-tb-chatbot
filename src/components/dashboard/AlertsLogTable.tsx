@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { downloadCSV } from './DataTable';
 import TranscriptLink from './TranscriptLink';
 
@@ -15,15 +15,20 @@ export default function AlertsLogTable({
   data,
   onRefresh,
   editable = true,
+  expandRecordId,
+  onExpandHandled,
 }: {
   data: string[][];
   onRefresh: () => void;
   editable?: boolean;
+  expandRecordId?: string | null;
+  onExpandHandled?: () => void;
 }) {
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
   const [editValues, setEditValues] = useState<{ reviewStatus: string; reviewerNotes: string; reviewedBy: string }>({ reviewStatus: '', reviewerNotes: '', reviewedBy: '' });
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
+  const expandedRowRef = useRef<HTMLTableRowElement | null>(null);
 
   if (data.length === 0) {
     return <div className="text-center py-12 text-gray-400">No red-flag alerts yet — nothing for the reviewer queue.</div>;
@@ -31,6 +36,25 @@ export default function AlertsLogTable({
 
   const headers = data[0] || [];
   const allRows = data.slice(1);
+
+  useEffect(() => {
+    if (!expandRecordId) return;
+    const idx = allRows.findIndex(r => r[0] === expandRecordId);
+    if (idx >= 0) {
+      setExpandedRow(idx);
+      const row = allRows[idx];
+      setEditValues({
+        reviewStatus: row[9] || 'Open',
+        reviewerNotes: row[10] || '',
+        reviewedBy: row[12] || '',
+      });
+      setTimeout(() => {
+        expandedRowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 50);
+    }
+    if (onExpandHandled) onExpandHandled();
+  }, [expandRecordId, allRows, onExpandHandled]);
+
   const q = search.trim().toLowerCase();
   // Match by alertId, conversationId, careReferralId, or escalationLevel
   const rows = q
@@ -130,6 +154,7 @@ export default function AlertsLogTable({
                 <>
                   <tr
                     key={`row-${i}`}
+                    ref={expandedRow === i ? expandedRowRef : undefined}
                     onClick={() => handleExpand(i)}
                     className={`border-b transition-colors ${editable ? 'cursor-pointer' : ''} ${expandedRow === i ? 'bg-blue-50' : rowBg}`}
                   >

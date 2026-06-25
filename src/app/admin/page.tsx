@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import AuthGate from '@/components/AuthGate';
+import SpeedbackShell from '@/components/SpeedbackShell';
 
 type TabType = 'dashboard' | 'sessions' | 'feedback' | 'referral-log' | 'care-referral-log';
 
@@ -156,46 +157,50 @@ function AdminInner() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      {/* Header */}
-      <div className="bg-gray-800 text-white px-6 py-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-bold">SCH Admin View — SCH TB Chatbot</h1>
-          <p className="text-xs text-gray-400">
-            Database:{' '}
-            <a
-              href={SPREADSHEET_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-400 hover:underline"
-            >
-              SCH TB Chatbot - Database [PROTOTYPE] ↗
-            </a>
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
+    <SpeedbackShell
+      title="SCH Admin"
+      subtitle={
+        <>
+          Database:{' '}
+          <a
+            href={SPREADSHEET_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-600 hover:underline"
+          >
+            SCH TB Chatbot - Database [PROTOTYPE] ↗
+          </a>
+        </>
+      }
+      activeView="admin"
+      rightActions={
+        <>
           <button
             onClick={fetchData}
-            className="px-3 py-1.5 bg-blue-600 text-white text-xs rounded-md hover:bg-blue-700"
+            className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 shadow-sm"
           >
             🔄 Refresh
           </button>
-          <a href="/" className="px-3 py-1.5 bg-gray-600 text-white text-xs rounded-md hover:bg-gray-500">
+          <a
+            href="/"
+            className="px-3 py-1.5 bg-white text-slate-700 text-xs font-medium border border-slate-200 rounded-lg hover:bg-slate-50"
+          >
             ← Back to Chat
           </a>
-        </div>
-      </div>
+        </>
+      }
+    >
 
       {/* Tabs */}
-      <div className="bg-white border-b px-6 flex gap-0">
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm mb-4 px-2 flex gap-0 overflow-x-auto">
         {tabs.map(tab => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors ${
+            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
               activeTab === tab.id
                 ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
             }`}
           >
             {tab.icon} {tab.label}
@@ -204,7 +209,7 @@ function AdminInner() {
       </div>
 
       {/* Content */}
-      <div className="p-6">
+      <div>
         {loading ? (
           <div className="text-center py-12 text-gray-500">Loading data...</div>
         ) : (
@@ -217,7 +222,7 @@ function AdminInner() {
           </>
         )}
       </div>
-    </div>
+    </SpeedbackShell>
   );
 }
 
