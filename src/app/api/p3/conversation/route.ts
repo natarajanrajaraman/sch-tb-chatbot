@@ -1,8 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { upsertP3Conversation, P3ConversationRow } from '@/lib/googleSheets';
+import { upsertP3Conversation, getAllP3Conversations, P3ConversationRow } from '@/lib/googleSheets';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
+
+export async function GET() {
+  try {
+    const data = await getAllP3Conversations();
+    return NextResponse.json({ data }, { headers: { 'Cache-Control': 'no-store' } });
+  } catch (err) {
+    return NextResponse.json({ data: [], error: String(err) }, { status: 200 });
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {

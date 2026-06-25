@@ -8,6 +8,7 @@ const REPO_BASE = 'https://github.com/natarajanrajaraman/sch-tb-chatbot/blob/mas
 
 const LINKS: { label: string; path: string; tag?: string }[] = [
   { label: 'README', path: 'README.md' },
+  { label: 'User journeys (testing)', path: 'docs/USER-JOURNEYS.md' },
   { label: 'P3 — System prompt', path: 'docs/p3-system-prompt.md', tag: 'P3' },
   { label: 'P3 — Escalation rules', path: 'docs/p3-escalation-rules.md', tag: 'P3' },
   { label: 'Production handoff', path: 'docs/PRODUCTION-HANDOFF.md' },
