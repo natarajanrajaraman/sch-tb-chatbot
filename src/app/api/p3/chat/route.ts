@@ -14,7 +14,9 @@ interface ChatRequestBody {
   history: { role: 'user' | 'assistant'; content: string }[];
   userMessage: string;
   patientTbCaseId?: string;          // optional; if user provided one at the
-                                     // escalation TB-case-ID prompt
+                                     // escalation prompt
+  patientContact?: string;           // optional; if user provided contact info
+                                     // at the escalation prompt
   systemPromptOverride?: string;     // optional; debug-panel hot-edit
 }
 
@@ -77,6 +79,7 @@ export async function POST(request: NextRequest) {
           followUpDate: '',
           notes: `User message: ${body.userMessage.slice(0, 200)}`,
           patientTbCaseId: body.patientTbCaseId || '',
+          patientContact: body.patientContact || '',
         });
       } catch (err) {
         console.error('Care referral log save failed:', err);

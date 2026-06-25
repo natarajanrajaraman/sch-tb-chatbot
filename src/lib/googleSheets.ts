@@ -321,6 +321,13 @@ export const CARE_REFERRAL_LOG_HEADERS = [
   // v0.9 — patient-provided TB case ID, captured ONLY at care-referral
   // time (with explicit Skip). Never linked across sessions. Optional.
   'patientTbCaseId',
+  // v0.9.3 — patient-provided contact info (phone / Viber number /
+  // similar) needed for SCH Tele-Health to actually reach the user.
+  // Same posture as patientTbCaseId: optional, explicit Skip,
+  // per-row only. Without this, the bot is no longer allowed to
+  // promise a callback — it directs the user to contact Tele-Health
+  // themselves.
+  'patientContact',
 ];
 
 export async function saveCareReferralLog(row: Record<string, string>): Promise<void> {
@@ -395,7 +402,7 @@ export async function getAllP3Conversations(): Promise<string[][]> {
 
 export async function getAllCareReferralLogs(): Promise<string[][]> {
   try {
-    return await getSheetValues('Care Referral Log', 'A1:N2000');
+    return await getSheetValues('Care Referral Log', 'A1:O2000');
   } catch {
     return [];
   }
@@ -405,14 +412,14 @@ export async function updateCareReferralLog(
   careReferralId: string,
   patch: Partial<Record<string, string>>
 ): Promise<boolean> {
-  const allData = await getSheetValues('Care Referral Log', 'A1:N2000');
+  const allData = await getSheetValues('Care Referral Log', 'A1:O2000');
   const rowIndex = allData.findIndex(row => row[0] === careReferralId);
   if (rowIndex < 0) return false;
   const sheetRow = rowIndex + 1;
-  // Update G..N cells (careProviderName .. patientTbCaseId)
-  const editableCols = ['careProviderName', 'careProviderTownship', 'careProviderContact', 'reasonForReferral', 'status', 'followUpDate', 'notes', 'patientTbCaseId'];
+  // Update G..O cells (careProviderName .. patientContact)
+  const editableCols = ['careProviderName', 'careProviderTownship', 'careProviderContact', 'reasonForReferral', 'status', 'followUpDate', 'notes', 'patientTbCaseId', 'patientContact'];
   const values = [editableCols.map(c => patch[c] ?? allData[rowIndex][CARE_REFERRAL_LOG_HEADERS.indexOf(c)] ?? '')];
-  await updateSheetCells('Care Referral Log', `G${sheetRow}:N${sheetRow}`, values);
+  await updateSheetCells('Care Referral Log', `G${sheetRow}:O${sheetRow}`, values);
   return true;
 }
 

@@ -64,7 +64,7 @@ export const P3_MODELS: ModelEntry[] = [
     band: 'ultra-cheap',
     pricePerMTokenInputUsd: 0.05,
     pricePerMTokenOutputUsd: 0.30,
-    notes: 'Cheapest in the registry. Fast, surprisingly capable for routine queries. Default.',
+    notes: 'Cheapest in the registry. Fast, surprisingly capable for routine queries.',
   },
   {
     id: 'google/gemini-2.5-flash',
@@ -72,11 +72,11 @@ export const P3_MODELS: ModelEntry[] = [
     band: 'ultra-cheap',
     pricePerMTokenInputUsd: 0.075,
     pricePerMTokenOutputUsd: 0.30,
-    notes: 'Google\'s cheap variant. Comparable price to DeepSeek; KZ noted Gemini does well on Burmese.',
+    notes: 'Google\'s cheap variant. KZ noted Gemini does well on Burmese. Default.',
   },
 ];
 
-export const DEFAULT_MODEL_ID = 'deepseek/deepseek-v4-flash';
+export const DEFAULT_MODEL_ID = 'google/gemini-2.5-flash';
 
 export function findModel(id: string): ModelEntry | undefined {
   return P3_MODELS.find(m => m.id === id);

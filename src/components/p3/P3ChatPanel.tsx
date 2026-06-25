@@ -41,7 +41,7 @@ export default function P3ChatPanel({ theme, modelId, platformView, systemPrompt
   const [p3ConversationId, setP3ConversationId] = useState(() => `P3-${generateId()}`);
   const [messages, setMessages] = useState<P3Msg[]>([]);
   const [inputText, setInputText] = useState('');
-  const [pendingTbCaseIdPrompt, setPendingTbCaseIdPrompt] = useState<{ careReferralId: string } | null>(null);
+  const [pendingEscalationPrompt, setPendingEscalationPrompt] = useState<{ careReferralId: string } | null>(null);
   const [isTyping, setIsTyping] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -61,7 +61,7 @@ export default function P3ChatPanel({ theme, modelId, platformView, systemPrompt
     if (onResetSignal == null) return;
     setMessages([]);
     setInputText('');
-    setPendingTbCaseIdPrompt(null);
+    setPendingEscalationPrompt(null);
     setError(null);
     setP3ConversationId(`P3-${generateId()}`);
     setTotals({
@@ -186,7 +186,7 @@ export default function P3ChatPanel({ theme, modelId, platformView, systemPrompt
       if (replyMsg.careReferralId && (replyMsg.escalation === 'immediate' || replyMsg.escalation === 'telehealth')) {
         // Only prompt once per escalation
         if (!patientTbCaseId) {
-          setPendingTbCaseIdPrompt({ careReferralId: replyMsg.careReferralId });
+          setPendingEscalationPrompt({ careReferralId: replyMsg.careReferralId });
         }
       }
     } catch (e: unknown) {
@@ -205,34 +205,69 @@ export default function P3ChatPanel({ theme, modelId, platformView, systemPrompt
     sendChatTurn(t);
   };
 
-  // TB Case ID prompt handlers
-  const handleTbCaseIdSubmit = (caseId: string) => {
-    if (!pendingTbCaseIdPrompt) return;
-    const txt = caseId.trim();
-    setPendingTbCaseIdPrompt(null);
-    const userLabelMm = txt ? `TB Case ID: ${txt}` : 'TB Case ID ကို ကျော်ပါမည်';
-    const userLabelEn = txt ? `TB Case ID: ${txt}` : 'Skipped TB Case ID';
+  // Escalation prompt handler — collects optional TB Case ID + contact info.
+  // PATCHes the Care Referral Log row that was minted by /api/p3/chat, then
+  // appends a clear acknowledgment whose wording depends on whether the
+  // user provided contact info (so the bot doesn't falsely promise a
+  // callback when no contact was actually shared).
+  const handleEscalationSubmit = (caseId: string, contact: string) => {
+    if (!pendingEscalationPrompt) return;
+    const txtCase = caseId.trim();
+    const txtContact = contact.trim();
+    const { careReferralId } = pendingEscalationPrompt;
+    setPendingEscalationPrompt(null);
+
+    // Echo the user's submission as a user turn (Mm + En)
+    const parts: { mm: string; en: string }[] = [];
+    if (txtCase) parts.push({ mm: `တီဘီ Case ID: ${txtCase}`, en: `TB Case ID: ${txtCase}` });
+    if (txtContact) parts.push({ mm: `ဆက်သွယ်ရန် အချက်အလက်: ${txtContact}`, en: `Contact: ${txtContact}` });
+    const userMm = parts.length > 0 ? parts.map(p => p.mm).join(' · ') : 'အချက်အလက် မပေးပါ (ကျော်ပါမည်)';
+    const userEn = parts.length > 0 ? parts.map(p => p.en).join(' · ') : 'Skipped (no info provided)';
     setMessages(prev => [...prev, {
       id: generateId(),
       role: 'user',
-      textMm: userLabelMm,
-      textEn: userLabelEn,
+      textMm: userMm,
+      textEn: userEn,
       ts: Date.now(),
     }]);
-    if (txt) {
+
+    // Persist whatever the user shared onto the existing Care Referral Log row.
+    if (txtCase || txtContact) {
+      fetch('/api/care-referral-log', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          careReferralId,
+          ...(txtCase ? { patientTbCaseId: txtCase } : {}),
+          ...(txtContact ? { patientContact: txtContact } : {}),
+        }),
+      }).catch(e => console.error('Care referral PATCH failed', e));
+    }
+
+    // Branch the acknowledgment so we don't promise a callback when we
+    // have no way to actually call back.
+    if (txtContact) {
+      const lead = txtCase
+        ? `ကျေးဇူးတင်ပါသည်။ TB Case ID (${txtCase}) နှင့် ဆက်သွယ်ရန် အချက်အလက် (${txtContact})`
+        : `ကျေးဇူးတင်ပါသည်။ သင်ပေးထားသော ဆက်သွယ်ရန် အချက်အလက် (${txtContact})`;
+      const leadEn = txtCase
+        ? `Thank you. Your TB Case ID (${txtCase}) and contact details (${txtContact})`
+        : `Thank you. Your contact details (${txtContact})`;
       setMessages(prev => [...prev, {
         id: generateId(),
         role: 'assistant',
-        textMm: `ကျေးဇူးတင်ပါသည်။ သင့်တီဘီ Case ID (${txt}) ကို "နေ" Tele-Health အဖွဲ့ထံ ပေးပို့ပြီးပါပြီ။`,
-        textEn: `Thank you. Your TB Case ID (${txt}) has been shared with the Sun Tele-Health team.`,
+        textMm: `${lead} ကို "နေ" Tele-Health အဖွဲ့ထံ ပေးပို့ပြီးပါပြီ။ မကြာမီ ဆက်သွယ်ပါမည်။`,
+        textEn: `${leadEn} have been shared with the Sun Tele-Health team. They will reach you shortly.`,
         ts: Date.now(),
       }]);
     } else {
+      // No contact info provided — DO NOT promise a callback. Direct the
+      // user to reach Tele-Health themselves via the follow-up channels.
       setMessages(prev => [...prev, {
         id: generateId(),
         role: 'assistant',
-        textMm: 'ကောင်းပါပြီ။ TB Case ID မပါဘဲ ဆက်လက်ဆောင်ရွက်ပါမည်။ "နေ" Tele-Health အဖွဲ့မှ သင်ပေးထားသော ဆက်သွယ်ရန် နည်းလမ်းမှတဆင့် ဆက်သွယ်ပါမည်။',
-        textEn: 'Understood. We will proceed without a TB Case ID. The Sun Tele-Health team will reach you through the contact information you provided.',
+        textMm: 'ကောင်းပါပြီ။ ဆက်သွယ်ရန် အချက်အလက် မပါသဖြင့် "နေ" Tele-Health အဖွဲ့မှ သင့်ထံ တိုက်ရိုက်ဆက်သွယ်နိုင်မည် မဟုတ်ပါ။\n\nကျေးဇူးပြု၍ အောက်ပါ နည်းလမ်းတစ်ခုခုဖြင့် "နေ" Tele-Health အဖွဲ့ကို ကိုယ်တိုင် ဆက်သွယ်ပါ —\nဖုန်း: 09-XXXXXXX\nViber: 09-XXXXXXX\nTelegram: @SCH-TB-XXXX\nFacebook: m.me/sch-tb-XXXX',
+        textEn: 'Understood. Without your contact information, the Sun Tele-Health team will NOT be able to reach you directly.\n\nPlease contact them yourself via one of these channels —\nPhone: 09-XXXXXXX\nViber: 09-XXXXXXX\nTelegram: @SCH-TB-XXXX\nFacebook: m.me/sch-tb-XXXX',
         ts: Date.now(),
       }]);
     }
@@ -296,12 +331,12 @@ export default function P3ChatPanel({ theme, modelId, platformView, systemPrompt
           </div>
         ))}
 
-        {/* TB Case ID prompt */}
-        {pendingTbCaseIdPrompt && (
-          <TbCaseIdPrompt
+        {/* Escalation contact prompt — TB Case ID + Phone/Contact */}
+        {pendingEscalationPrompt && (
+          <EscalationContactPrompt
             theme={theme}
-            careReferralId={pendingTbCaseIdPrompt.careReferralId}
-            onSubmit={handleTbCaseIdSubmit}
+            careReferralId={pendingEscalationPrompt.careReferralId}
+            onSubmit={handleEscalationSubmit}
           />
         )}
 
@@ -329,13 +364,13 @@ export default function P3ChatPanel({ theme, modelId, platformView, systemPrompt
           placeholder="စာပို့ပါ... (Type a message)"
           className="flex-1 px-4 py-2.5 outline-none border"
           style={{ backgroundColor: '#ffffff', borderRadius: theme.inputRadius, fontSize: theme.fontSize }}
-          disabled={isTyping || !!pendingTbCaseIdPrompt}
+          disabled={isTyping || !!pendingEscalationPrompt}
         />
         <button
           type="submit"
           className="w-10 h-10 rounded-full flex items-center justify-center transition-opacity hover:opacity-80 disabled:opacity-40"
           style={{ backgroundColor: theme.sendButtonColor, color: '#ffffff' }}
-          disabled={!inputText.trim() || isTyping || !!pendingTbCaseIdPrompt}
+          disabled={!inputText.trim() || isTyping || !!pendingEscalationPrompt}
         >
           <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
             <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
@@ -346,44 +381,70 @@ export default function P3ChatPanel({ theme, modelId, platformView, systemPrompt
   );
 }
 
-function TbCaseIdPrompt({ theme, careReferralId, onSubmit }: { theme: PlatformTheme; careReferralId: string; onSubmit: (caseId: string) => void }) {
-  const [val, setVal] = useState('');
+function EscalationContactPrompt({
+  theme, careReferralId, onSubmit,
+}: {
+  theme: PlatformTheme;
+  careReferralId: string;
+  onSubmit: (caseId: string, contact: string) => void;
+}) {
+  const [caseId, setCaseId] = useState('');
+  const [contact, setContact] = useState('');
   return (
     <div className="flex justify-start" style={{ marginBottom: theme.messageGap }}>
       <div className="max-w-[90%] w-full">
         <div
-          className="shadow-sm border-l-4 border-blue-400 bg-blue-50 rounded p-3"
+          className="shadow-sm border-l-4 border-blue-400 bg-blue-50 rounded p-3 space-y-2"
           style={{ fontSize: theme.fontSize, color: '#1e3a8a' }}
         >
-          <div className="mb-2 whitespace-pre-wrap">
+          <div className="whitespace-pre-wrap">
             🩺 careReferralId: <code className="font-mono text-[11px]">{careReferralId}</code>
             <br />
-            တီဘီ Case ID ရှိပါက မျှဝေပေးပါ — "နေ" Tele-Health အဖွဲ့မှ သင်ထံ ပိုမြန်စွာ ဆက်သွယ်နိုင်ပါမည်။ ကျော်လည်း ရပါသည်။
+            <span>ဆက်လက်လုပ်ဆောင်ရန် အောက်ပါ အချက်အလက်များ ပေးပါ — "နေ" Tele-Health အဖွဲ့မှ သင်ထံ ဆက်သွယ်နိုင်ပါမည်။ မပေးလိုပါက ကျော်နိုင်ပါသည်။</span>
             <br />
-            <span className="text-[11px] opacity-70">If you have a TB Case ID, sharing it will help the SCH Tele-Health team contact you faster. You can also skip.</span>
+            <span className="text-[11px] opacity-70">To complete this referral, please share the details below so the Sun Tele-Health team can reach you. You can skip both — but then they will not be able to contact you directly.</span>
           </div>
-          <div className="flex gap-2 mt-2">
+
+          <div>
+            <label className="block text-[10px] font-medium uppercase tracking-wide mb-0.5 opacity-80">TB Case ID (optional)</label>
             <input
               type="text"
-              value={val}
-              onChange={e => setVal(e.target.value)}
-              placeholder="TB Case ID"
-              className="flex-1 px-2 py-1.5 text-xs border rounded focus:ring-1 focus:ring-blue-400 outline-none"
+              value={caseId}
+              onChange={e => setCaseId(e.target.value)}
+              placeholder="e.g. TB-2026-0123"
+              className="w-full px-2 py-1.5 text-xs border rounded focus:ring-1 focus:ring-blue-400 outline-none"
             />
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-medium uppercase tracking-wide mb-0.5 opacity-80">
+              Phone / Viber / Contact (recommended)
+            </label>
+            <input
+              type="text"
+              value={contact}
+              onChange={e => setContact(e.target.value)}
+              placeholder="e.g. 09xxxxxxxx"
+              className="w-full px-2 py-1.5 text-xs border rounded focus:ring-1 focus:ring-blue-400 outline-none"
+            />
+          </div>
+
+          <div className="flex gap-2 pt-1">
             <button
               type="button"
-              onClick={() => onSubmit(val)}
-              disabled={!val.trim()}
-              className="px-3 py-1.5 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-50"
+              onClick={() => onSubmit(caseId, contact)}
+              disabled={!caseId.trim() && !contact.trim()}
+              className="px-3 py-1.5 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-40"
             >
               Submit
             </button>
             <button
               type="button"
-              onClick={() => onSubmit('')}
+              onClick={() => onSubmit('', '')}
               className="px-3 py-1.5 bg-gray-200 text-gray-700 text-xs rounded hover:bg-gray-300"
+              title="Skip both fields"
             >
-              Skip
+              Skip both
             </button>
           </div>
         </div>

@@ -135,9 +135,6 @@ export default function WorkflowFlowchart({ state, session }: { state: Conversat
           <span>P3 — Patient info chatbot</span>
           <span className="ml-auto text-[9px] text-amber-400/80">LLM mode</span>
         </div>
-        <div className="text-[9px] text-gray-500 mt-1 leading-relaxed">
-          Open-ended LLM conversation. State machine does not apply. See the cost meter below for token usage.
-        </div>
       </div>
     );
   }

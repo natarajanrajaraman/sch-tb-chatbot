@@ -31,6 +31,8 @@ export async function POST(request: NextRequest) {
       status: body.status || 'Pending',
       followUpDate: body.followUpDate || '',
       notes: body.notes || '',
+      patientTbCaseId: body.patientTbCaseId || '',
+      patientContact: body.patientContact || '',
     });
     return NextResponse.json({ success: true, careReferralId });
   } catch (err) {

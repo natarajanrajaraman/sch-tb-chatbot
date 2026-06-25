@@ -6,12 +6,13 @@ import { downloadCSV } from './DataTable';
 const EDITABLE_FIELDS = [
   { key: 'careProviderName', label: 'Care Provider', col: 6 },
   { key: 'careProviderTownship', label: 'Township', col: 7 },
-  { key: 'careProviderContact', label: 'Contact', col: 8 },
+  { key: 'careProviderContact', label: 'Provider Contact', col: 8 },
   { key: 'reasonForReferral', label: 'Reason', col: 9 },
   { key: 'status', label: 'Status', col: 10, options: ['Pending', 'Contacted', 'In Care', 'Closed', 'Lost'] },
   { key: 'followUpDate', label: 'Follow-up Date', col: 11, type: 'date' as const },
   { key: 'notes', label: 'Notes', col: 12 },
   { key: 'patientTbCaseId', label: 'Patient TB Case ID', col: 13 },
+  { key: 'patientContact', label: 'Patient Contact', col: 14 },
 ];
 
 export default function CareReferralLogTable({
