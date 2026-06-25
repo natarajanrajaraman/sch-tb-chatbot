@@ -5,9 +5,11 @@ import ChatWindow from '@/components/ChatWindow';
 import TranslationPanel from '@/components/TranslationPanel';
 import FeedbackPanel from '@/components/FeedbackPanel';
 import WorkflowFlowchart from '@/components/WorkflowFlowchart';
+import CollapsibleSection from '@/components/CollapsibleSection';
 import P3ChatPanel, { P3UsageSnapshot, P3Msg } from '@/components/p3/P3ChatPanel';
 import P3CostMeter from '@/components/p3/P3CostMeter';
 import P3DocLinks from '@/components/p3/P3DocLinks';
+import P3SystemPromptEditor from '@/components/p3/P3SystemPromptEditor';
 import { DEFAULT_MODEL_ID } from '@/lib/p3/models';
 import { PlatformType, PLATFORM_THEMES, PLATFORM_ORDER } from '@/data/platformThemes';
 import {
@@ -27,7 +29,8 @@ const DEFAULT_PLATFORM: PlatformType = 'viber';
 export default function Home() {
   const [platform, setPlatform] = useState<PlatformType>(DEFAULT_PLATFORM);
   const [debugPanelOpen, setDebugPanelOpen] = useState(false);
-  const [translationOpen, setTranslationOpen] = useState(false);
+  // English Translation defaults to OPEN per v0.9.2 layout spec.
+  const [translationOpen, setTranslationOpen] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
   const [session, setSession] = useState<SessionData>(createInitialSession(DEFAULT_PLATFORM));
   const [conversationState, setConversationState] = useState<ConversationState>('LANDING');
@@ -37,6 +40,7 @@ export default function Home() {
   const [p3ModelId, setP3ModelId] = useState<string>(DEFAULT_MODEL_ID);
   const [p3ResetSignal, setP3ResetSignal] = useState(0);
   const [p3Messages, setP3Messages] = useState<P3Msg[]>([]);
+  const [p3SystemPromptOverride, setP3SystemPromptOverride] = useState<string | null>(null);
   const [p3Usage, setP3Usage] = useState<P3UsageSnapshot>({
     modelId: DEFAULT_MODEL_ID,
     totalPromptTokens: 0,
@@ -103,15 +107,16 @@ export default function Home() {
 
   return (
     <div className="h-screen flex bg-gray-900 overflow-hidden relative">
-      {/* LEFT: Clean device mockup */}
-      <div className="flex-1 flex items-center justify-center p-6">
+      {/* LEFT: Clean device mockup + floating restart button below */}
+      <div className="flex-1 flex flex-col items-center justify-center p-6 gap-3 min-h-0">
         <div
           className="w-full rounded-2xl overflow-hidden shadow-2xl border-4 border-gray-700 flex flex-col transition-all duration-300"
           style={{
             backgroundColor: theme.chatBg,
             maxWidth: theme.frameWidth,
             maxHeight: theme.frameHeight,
-            height: '100%',
+            flex: '1 1 0',
+            minHeight: 0,
           }}
         >
           {isP3Mode ? (
@@ -119,6 +124,7 @@ export default function Home() {
               theme={theme}
               modelId={p3ModelId}
               platformView={platform}
+              systemPromptOverride={p3SystemPromptOverride}
               onUsageChange={setP3Usage}
               onMessagesChange={setP3Messages}
               onResetSignal={p3ResetSignal}
@@ -135,6 +141,17 @@ export default function Home() {
             />
           )}
         </div>
+
+        {/* Floating Restart Conversation button — moved out of the
+            debug panel in v0.9.2 so testers can reset without
+            opening the panel. */}
+        <button
+          onClick={handleRestart}
+          className="px-4 py-2 bg-red-600/90 text-white text-xs font-medium rounded-full shadow-lg hover:bg-red-700 transition-colors shrink-0"
+          title="Restart the conversation"
+        >
+          ↻ Restart Conversation
+        </button>
       </div>
 
       {/* Toggle tab for debug panel */}
@@ -159,112 +176,124 @@ export default function Home() {
               PROTOTYPE v{BOT_VERSION} — FOR INTERNAL TESTING ONLY
             </div>
 
-            {/* Workflow flowchart — current conversation position */}
-            <WorkflowFlowchart state={conversationState} session={session} />
+            {/* Sections collapsible per v0.9.2 layout spec. */}
+            <div className="flex flex-col min-h-0 flex-1 overflow-y-auto">
 
-            {/* P3 — cost meter + model picker (shown in P3 mode) */}
-            <P3CostMeter
-              modelId={p3ModelId}
-              onModelChange={setP3ModelId}
-              usage={p3Usage}
-              onReset={() => setP3ResetSignal(s => s + 1)}
-              visible={isP3Mode}
-            />
+              {/* Workflow position — expanded by default */}
+              <CollapsibleSection title="Workflow position" defaultOpen={true}>
+                <WorkflowFlowchart state={conversationState} session={session} />
+              </CollapsibleSection>
 
-            {/* Docs links — always visible */}
-            <P3DocLinks />
-
-            {/* Restart Conversation — own row at top */}
-            <div className="px-3 pt-2.5 pb-1 shrink-0">
-              <button
-                onClick={handleRestart}
-                className="w-full py-1 bg-red-600/70 text-white text-[10px] font-medium rounded hover:bg-red-700 transition-colors"
-              >
-                Restart Conversation
-              </button>
-            </div>
-
-            {/* Platform skin */}
-            <div className="px-3 py-2 border-b border-gray-700/30 bg-gray-800/60 shrink-0">
-              <div className="text-[9px] font-medium text-gray-500 uppercase tracking-wider mb-1.5">Platform Skin</div>
-              <div className="flex gap-1">
-                {PLATFORM_ORDER.map((p) => {
-                  const t = PLATFORM_THEMES[p];
-                  const isActive = p === platform;
-                  return (
-                    <button
-                      key={p}
-                      onClick={() => handlePlatformChange(p)}
-                      className={`flex-1 py-1 rounded text-[10px] font-medium transition-all ${
-                        isActive
-                          ? 'bg-white text-gray-900 shadow-sm'
-                          : 'bg-gray-700/40 text-gray-400 hover:text-gray-200 hover:bg-gray-700/60'
-                      }`}
-                    >
-                      {t.headerIcon} {t.name}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* English translation toggle + panel */}
-            <div className="flex flex-col min-h-0 flex-1 overflow-hidden">
-              <button
-                onClick={() => setTranslationOpen(!translationOpen)}
-                className={`px-3 py-1.5 text-[10px] font-medium tracking-wider uppercase text-left border-b border-gray-700/30 transition-colors shrink-0 ${
-                  translationOpen
-                    ? 'bg-blue-900/30 text-blue-300'
-                    : 'bg-gray-800/40 text-gray-500 hover:text-gray-300 hover:bg-gray-800/60'
-                }`}
-              >
-                {translationOpen ? '▾' : '▸'} English Translation
-              </button>
-
-              {translationOpen && (
-                <div className="flex-1 min-h-0 overflow-hidden">
-                  <TranslationPanel
-                    messages={
-                      isP3Mode
-                        ? p3Messages.map(m => ({
-                            id: m.id,
-                            sender: (m.role === 'user' ? 'user' : 'bot') as 'user' | 'bot',
-                            textMm: m.textMm,
-                            textEn: m.textEn,
-                            timestamp: m.ts,
-                          }))
-                        : messages
-                    }
+              {/* P3 cost meter + model picker — shown in P3 mode only */}
+              {isP3Mode && (
+                <CollapsibleSection title="P3 LLM cost meter" defaultOpen={true}>
+                  <P3CostMeter
+                    modelId={p3ModelId}
+                    onModelChange={setP3ModelId}
+                    usage={p3Usage}
+                    onReset={() => setP3ResetSignal(s => s + 1)}
+                    visible={true}
                   />
-                </div>
+                </CollapsibleSection>
               )}
-            </div>
 
-            {/* Dashboard views — own rows just below English Translation */}
-            <div className="px-3 py-2 border-t border-gray-700/30 bg-gray-800/40 space-y-1 shrink-0">
-              <div className="text-[9px] font-medium text-gray-500 uppercase tracking-wider mb-1">Dashboards (mock auth)</div>
-              <a href="/admin" className="block w-full px-2 py-1 bg-gray-700/50 text-gray-200 text-[10px] font-medium rounded hover:bg-gray-700 text-center">
-                SCH Admin View
-              </a>
-              <a href="/telehealth" className="block w-full px-2 py-1 bg-gray-700/50 text-gray-200 text-[10px] font-medium rounded hover:bg-gray-700 text-center">
-                SCH Telehealth View
-              </a>
-              <a href="/screening-provider" className="block w-full px-2 py-1 bg-gray-700/50 text-gray-200 text-[10px] font-medium rounded hover:bg-gray-700 text-center">
-                TB Screening Provider View
-              </a>
-              <a href="/care-provider" className="block w-full px-2 py-1 bg-gray-700/50 text-gray-200 text-[10px] font-medium rounded hover:bg-gray-700 text-center">
-                TB Care Provider View
-              </a>
-            </div>
+              {/* P3 system prompt hot-edit — only meaningful in P3 mode */}
+              {isP3Mode && (
+                <P3SystemPromptEditor
+                  override={p3SystemPromptOverride}
+                  onOverrideChange={setP3SystemPromptOverride}
+                />
+              )}
 
-            {/* Feedback always visible at bottom */}
-            <div className="shrink-0">
-              <FeedbackPanel
-                conversationId={session.conversationId}
-                platformView={platform}
-                messages={messages}
-                conversationState={conversationState}
-              />
+              {/* Platform skin — collapsed by default */}
+              <CollapsibleSection title="Platform Skin" defaultOpen={false}>
+                <div className="px-3 py-2 bg-gray-800/60">
+                  <div className="flex gap-1">
+                    {PLATFORM_ORDER.map((p) => {
+                      const t = PLATFORM_THEMES[p];
+                      const isActive = p === platform;
+                      return (
+                        <button
+                          key={p}
+                          onClick={() => handlePlatformChange(p)}
+                          className={`flex-1 py-1 rounded text-[10px] font-medium transition-all ${
+                            isActive
+                              ? 'bg-white text-gray-900 shadow-sm'
+                              : 'bg-gray-700/40 text-gray-400 hover:text-gray-200 hover:bg-gray-700/60'
+                          }`}
+                        >
+                          {t.headerIcon} {t.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </CollapsibleSection>
+
+              {/* English translation — expanded by default */}
+              <div className="flex flex-col min-h-0">
+                <button
+                  onClick={() => setTranslationOpen(!translationOpen)}
+                  className={`px-3 py-1.5 text-[10px] font-medium tracking-wider uppercase text-left border-b border-gray-700/30 transition-colors shrink-0 ${
+                    translationOpen
+                      ? 'bg-blue-900/30 text-blue-300'
+                      : 'bg-gray-800/40 text-gray-500 hover:text-gray-300 hover:bg-gray-800/60'
+                  }`}
+                >
+                  {translationOpen ? '▾' : '▸'} English Translation
+                </button>
+                {translationOpen && (
+                  <div className="min-h-[180px] max-h-[280px] overflow-hidden">
+                    <TranslationPanel
+                      messages={
+                        isP3Mode
+                          ? p3Messages.map(m => ({
+                              id: m.id,
+                              sender: (m.role === 'user' ? 'user' : 'bot') as 'user' | 'bot',
+                              textMm: m.textMm,
+                              textEn: m.textEn,
+                              timestamp: m.ts,
+                            }))
+                          : messages
+                      }
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Dashboards — expanded by default */}
+              <CollapsibleSection title="Dashboards (mock auth)" defaultOpen={true}>
+                <div className="px-3 py-2 space-y-1 bg-gray-800/40">
+                  <a href="/admin" className="block w-full px-2 py-1 bg-gray-700/50 text-gray-200 text-[10px] font-medium rounded hover:bg-gray-700 text-center">
+                    SCH Admin View
+                  </a>
+                  <a href="/telehealth" className="block w-full px-2 py-1 bg-gray-700/50 text-gray-200 text-[10px] font-medium rounded hover:bg-gray-700 text-center">
+                    SCH Telehealth View
+                  </a>
+                  <a href="/screening-provider" className="block w-full px-2 py-1 bg-gray-700/50 text-gray-200 text-[10px] font-medium rounded hover:bg-gray-700 text-center">
+                    TB Screening Provider View
+                  </a>
+                  <a href="/care-provider" className="block w-full px-2 py-1 bg-gray-700/50 text-gray-200 text-[10px] font-medium rounded hover:bg-gray-700 text-center">
+                    TB Care Provider View
+                  </a>
+                </div>
+              </CollapsibleSection>
+
+              {/* Docs (GitHub web view) — collapsed by default */}
+              <CollapsibleSection title="Docs (GitHub web view)" defaultOpen={false}>
+                <P3DocLinks />
+              </CollapsibleSection>
+
+              {/* Tester feedback — expanded by default */}
+              <CollapsibleSection title="Tester Feedback" defaultOpen={true}>
+                <FeedbackPanel
+                  conversationId={session.conversationId}
+                  platformView={platform}
+                  messages={messages}
+                  conversationState={conversationState}
+                />
+              </CollapsibleSection>
+
             </div>
           </>
         )}

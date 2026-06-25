@@ -13,15 +13,21 @@ interface ChatRequestBody {
   modelId?: string;
   history: { role: 'user' | 'assistant'; content: string }[];
   userMessage: string;
-  patientTbCaseId?: string;   // optional; if user provided one at the
-                              // escalation TB-case-ID prompt
+  patientTbCaseId?: string;          // optional; if user provided one at the
+                                     // escalation TB-case-ID prompt
+  systemPromptOverride?: string;     // optional; debug-panel hot-edit
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json() as ChatRequestBody;
     const modelId = body.modelId && findModel(body.modelId) ? body.modelId : DEFAULT_MODEL_ID;
-    const sysPrompt = getSystemPrompt();
+    // Hot-edit support: if the caller supplied a non-empty override
+    // (from the debug-panel editor), use it instead of the canonical
+    // docs/p3-system-prompt.md content.
+    const sysPrompt = (body.systemPromptOverride && body.systemPromptOverride.trim())
+      ? body.systemPromptOverride
+      : getSystemPrompt();
 
     // Rule-based pre-check on the user's latest message
     const preCheck = ruleBasedPreCheck(body.userMessage);

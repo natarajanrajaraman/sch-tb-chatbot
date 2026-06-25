@@ -34,6 +34,15 @@ export const P3_MODELS: ModelEntry[] = [
     disabled: true,
   },
   {
+    id: 'google/gemini-2.5-pro',
+    label: 'Gemini 2.5 Pro',
+    band: 'frontier',
+    pricePerMTokenInputUsd: 1.25,
+    pricePerMTokenOutputUsd: 5.00,
+    notes: 'Google flagship. KZ noted Gemini handles Burmese translation well — high-end option.',
+    disabled: true,
+  },
+  {
     id: 'openai/gpt-5.4-mini',
     label: 'GPT-5.4 mini',
     band: 'efficient',
@@ -55,11 +64,19 @@ export const P3_MODELS: ModelEntry[] = [
     band: 'ultra-cheap',
     pricePerMTokenInputUsd: 0.05,
     pricePerMTokenOutputUsd: 0.30,
-    notes: 'Cheapest in the registry. Fast, surprisingly capable for routine queries.',
+    notes: 'Cheapest in the registry. Fast, surprisingly capable for routine queries. Default.',
+  },
+  {
+    id: 'google/gemini-2.5-flash',
+    label: 'Gemini 2.5 Flash',
+    band: 'ultra-cheap',
+    pricePerMTokenInputUsd: 0.075,
+    pricePerMTokenOutputUsd: 0.30,
+    notes: 'Google\'s cheap variant. Comparable price to DeepSeek; KZ noted Gemini does well on Burmese.',
   },
 ];
 
-export const DEFAULT_MODEL_ID = 'openai/gpt-5.4-mini';
+export const DEFAULT_MODEL_ID = 'deepseek/deepseek-v4-flash';
 
 export function findModel(id: string): ModelEntry | undefined {
   return P3_MODELS.find(m => m.id === id);

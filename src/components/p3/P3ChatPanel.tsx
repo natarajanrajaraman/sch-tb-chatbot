@@ -31,12 +31,13 @@ interface P3ChatPanelProps {
   theme: PlatformTheme;
   modelId: string;
   platformView: string;
+  systemPromptOverride?: string | null;
   onUsageChange: (usage: P3UsageSnapshot) => void;
   onMessagesChange?: (messages: P3Msg[]) => void;
   onResetSignal?: number;     // bump to reset the conversation
 }
 
-export default function P3ChatPanel({ theme, modelId, platformView, onUsageChange, onMessagesChange, onResetSignal }: P3ChatPanelProps) {
+export default function P3ChatPanel({ theme, modelId, platformView, systemPromptOverride, onUsageChange, onMessagesChange, onResetSignal }: P3ChatPanelProps) {
   const [p3ConversationId, setP3ConversationId] = useState(() => `P3-${generateId()}`);
   const [messages, setMessages] = useState<P3Msg[]>([]);
   const [inputText, setInputText] = useState('');
@@ -127,6 +128,7 @@ export default function P3ChatPanel({ theme, modelId, platformView, onUsageChang
           history: historyPayload,
           userMessage: userText,
           patientTbCaseId,
+          systemPromptOverride: systemPromptOverride || undefined,
         }),
       });
       const data = await res.json();
@@ -193,7 +195,7 @@ export default function P3ChatPanel({ theme, modelId, platformView, onUsageChang
     } finally {
       setIsTyping(false);
     }
-  }, [messages, p3ConversationId, modelId, platformView]);
+  }, [messages, p3ConversationId, modelId, platformView, systemPromptOverride]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
