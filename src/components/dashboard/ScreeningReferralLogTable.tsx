@@ -365,6 +365,23 @@ function isEditableBy(field: FieldConfig, role: UserRole): boolean {
   return field.editableBy === 'all' || field.editableBy.includes(role);
 }
 
+// v1.7.6 — default visible columns in the row view. Anything not listed
+// here is hidden by default; the user can flip it on via the Columns
+// toolbar. Status + Transcript are pseudo-columns we render before the
+// sheet columns and are always shown.
+const DEFAULT_VISIBLE_COLUMNS = new Set([
+  'screeningReferralId',
+  'clientName',
+  'referralType',
+  'township',
+  'contactAttempts',
+  'clientContacted',
+  'patientDx',
+  'careProviderReferralCompleted',
+]);
+
+const COLUMN_VIS_LS_KEY = 'sch-screening-referral-log-cols-v1';
+
 export default function ScreeningReferralLogTable({
   data,
   onRefresh,
@@ -393,6 +410,30 @@ export default function ScreeningReferralLogTable({
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
   const expandedRowRef = useRef<HTMLTableRowElement | null>(null);
+
+  // v1.7.6 — column visibility (persisted to localStorage so it survives
+  // reloads). Lazy init so SSR doesn't barf on `window`.
+  const [visibleColumns, setVisibleColumns] = useState<Set<string>>(() => {
+    if (typeof window === 'undefined') return new Set(DEFAULT_VISIBLE_COLUMNS);
+    try {
+      const stored = window.localStorage.getItem(COLUMN_VIS_LS_KEY);
+      if (stored) return new Set(JSON.parse(stored) as string[]);
+    } catch {}
+    return new Set(DEFAULT_VISIBLE_COLUMNS);
+  });
+  const [showColumnPicker, setShowColumnPicker] = useState(false);
+  const toggleColumn = (k: string) => {
+    setVisibleColumns(prev => {
+      const next = new Set(prev);
+      if (next.has(k)) next.delete(k); else next.add(k);
+      try { window.localStorage.setItem(COLUMN_VIS_LS_KEY, JSON.stringify([...next])); } catch {}
+      return next;
+    });
+  };
+  const resetColumns = () => {
+    setVisibleColumns(new Set(DEFAULT_VISIBLE_COLUMNS));
+    try { window.localStorage.removeItem(COLUMN_VIS_LS_KEY); } catch {}
+  };
 
   const dirty = useMemo(() => {
     const keys = new Set([...Object.keys(editValues), ...Object.keys(initialValues)]);
@@ -536,6 +577,40 @@ export default function ScreeningReferralLogTable({
               ✕
             </button>
           )}
+          {/* v1.7.6 — column picker */}
+          <div className="relative">
+            <button
+              onClick={() => setShowColumnPicker(s => !s)}
+              className="px-3 py-1.5 bg-white border border-slate-300 text-slate-700 text-xs rounded-md hover:bg-slate-50"
+              title="Show or hide columns"
+            >
+              Columns ({visibleColumns.size}/{headers.length})
+            </button>
+            {showColumnPicker && (
+              <div className="absolute right-0 mt-1 z-30 bg-white border border-slate-200 rounded-md shadow-lg p-2 w-64 max-h-96 overflow-y-auto">
+                <div className="flex items-center justify-between mb-1 pb-1 border-b">
+                  <span className="text-[10px] font-semibold text-slate-600 uppercase">Columns</span>
+                  <button
+                    onClick={resetColumns}
+                    className="text-[10px] text-blue-600 hover:underline"
+                  >
+                    Reset default
+                  </button>
+                </div>
+                {headers.map(h => (
+                  <label key={h} className="flex items-center gap-2 py-0.5 text-[11px] hover:bg-slate-50 px-1 rounded cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={visibleColumns.has(h)}
+                      onChange={() => toggleColumn(h)}
+                      className="w-3 h-3"
+                    />
+                    <span className="font-mono text-[10px]">{h}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
           <button
             onClick={() => downloadCSV(data, 'Screening Referral Log')}
             className="px-3 py-1.5 bg-green-600 text-white text-xs rounded-md hover:bg-green-700"
@@ -577,12 +652,16 @@ export default function ScreeningReferralLogTable({
       )}
       <div className="bg-white rounded-lg shadow-sm overflow-x-auto overflow-y-auto" style={{ maxHeight: '70vh' }}>
         <table className="w-full text-xs">
-          <thead className="sticky top-0 z-10 bg-gray-50 shadow-sm">
+          <thead className="sticky top-0 z-20 bg-gray-50 shadow-sm">
             <tr className="border-b">
-              <th className="px-3 py-2.5 text-left font-semibold text-gray-600 whitespace-nowrap">Status</th>
+              {/* v1.7.6 — Status column is sticky-left so the badge stays
+                  visible when horizontally scrolling a wide row. */}
+              <th className="sticky left-0 z-30 bg-gray-50 px-3 py-2.5 text-left font-semibold text-gray-600 whitespace-nowrap shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]">Status</th>
               <th className="px-3 py-2.5 text-left font-semibold text-gray-600 whitespace-nowrap">Transcript</th>
               {headers.map((h, i) => (
-                <th key={i} className="px-3 py-2.5 text-left font-semibold text-gray-600 whitespace-nowrap">{h}</th>
+                visibleColumns.has(h) && (
+                  <th key={i} className="px-3 py-2.5 text-left font-semibold text-gray-600 whitespace-nowrap">{h}</th>
+                )
               ))}
             </tr>
           </thead>
@@ -594,6 +673,7 @@ export default function ScreeningReferralLogTable({
                   key={i}
                   row={row}
                   headers={headers}
+                  visibleColumns={visibleColumns}
                   isExpanded={expandedRow === i}
                   editable={editable}
                   userRole={userRole}
@@ -617,11 +697,12 @@ export default function ScreeningReferralLogTable({
 }
 
 function ScreeningReferralRow({
-  row, headers, isExpanded, editable, userRole, editValues, setEditValues,
+  row, headers, visibleColumns, isExpanded, editable, userRole, editValues, setEditValues,
   onExpand, onSave, onCancel, saving, statusLabel, statusBadge, rowRef,
 }: {
   row: string[];
   headers: string[];
+  visibleColumns: Set<string>;
   isExpanded: boolean;
   editable: boolean;
   userRole: UserRole;
@@ -675,21 +756,27 @@ function ScreeningReferralRow({
         onClick={onExpand}
         className={`border-b transition-colors ${editable ? 'cursor-pointer' : ''} ${isExpanded ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
       >
-        <td className="px-3 py-2 whitespace-nowrap">
+        {/* v1.7.6 — Status cell sticks to the left edge of the scroll
+            container so the badge stays visible during horizontal scroll. */}
+        <td className={`sticky left-0 z-10 px-3 py-2 whitespace-nowrap shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)] ${isExpanded ? 'bg-blue-50' : 'bg-white'}`}>
           <span className={`px-2 py-0.5 rounded text-[10px] ${statusBadge}`}>{statusLabel}</span>
         </td>
         <td className="px-3 py-2 whitespace-nowrap" onClick={e => e.stopPropagation()}>
           <TranscriptLink conversationId={row[1] || ''} />
         </td>
-        {headers.map((_, j) => (
-          <td key={j} className="px-3 py-2 text-gray-700 whitespace-nowrap max-w-[200px] truncate" title={row[j] || ''}>{row[j] || ''}</td>
+        {headers.map((h, j) => (
+          visibleColumns.has(h) && (
+            <td key={j} className="px-3 py-2 text-gray-700 whitespace-nowrap max-w-[200px] truncate" title={row[j] || ''}>{row[j] || ''}</td>
+          )
         ))}
       </tr>
       {isExpanded && (
         <tr>
           {/* v1.7 — keep the edit panel anchored to the left of the scroll
-              container so it doesn't stretch with the full table width. */}
-          <td colSpan={headers.length + 2} className="bg-blue-50/50 p-0">
+              container so it doesn't stretch with the full table width.
+              v1.7.6 — colSpan widened to account for variable visible cols
+              + the 2 pseudo-columns. */}
+          <td colSpan={[...visibleColumns].filter(h => headers.includes(h)).length + 2} className="bg-blue-50/50 p-0">
             <div
               className="sticky left-0 px-6 py-4"
               style={{ width: 'min(1100px, calc(100vw - 140px))' }}
@@ -751,7 +838,7 @@ function FieldGroupBlock({ group, userRole, editValues, setEditValues }: {
     <div className="mb-5">
       <div className="text-[12px] font-semibold text-gray-700 uppercase tracking-wide mb-1">{group.title}</div>
       <div className="text-[11px] text-gray-500 mb-2">{group.description}</div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+      <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
         {group.fields.map(key => {
           const field = FIELDS_BY_KEY[key];
           if (!field) return null;
@@ -782,9 +869,10 @@ function FieldEditor({ field, userRole, editValues, setEditValues }: {
     ? field.primaryFor.includes(userRole)
     : field.primaryFor === userRole;
   const isYourResponsibility = primaryMatch || field.autoStampFor === userRole;
+  // v1.7.6 — compact wrapper for short fields; wide for textarea + many-option radios.
   const wrapperClass =
-    field.type === 'textarea' ? 'md:col-span-2 lg:col-span-3' :
-    field.type === 'radio' && (field.options?.length || 0) > 3 ? 'md:col-span-2' : '';
+    field.type === 'textarea' ? '[grid-column:1/-1]' :
+    field.type === 'radio' && (field.options?.length || 0) > 3 ? '[grid-column:span_2]' : '';
 
   const value = editValues[field.key] || '';
   const setValue = (v: string) => setEditValues(prev => ({ ...prev, [field.key]: v }));
