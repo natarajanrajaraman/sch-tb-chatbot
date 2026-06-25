@@ -38,6 +38,10 @@ async function findTranscript(conversationId: string): Promise<{ fileId: string;
     fields: 'files(id, webViewLink)',
     spaces: 'drive',
     pageSize: 1,
+    // Shared Drive support — required when the configured folder lives
+    // inside a Shared Drive rather than a normal My Drive folder.
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
   });
   const file = resp.data.files?.[0];
   if (!file?.id) return null;
@@ -62,13 +66,18 @@ export async function saveTranscript(conversationId: string, markdown: string): 
         mimeType: 'text/markdown',
         body: bodyStream,
       },
+      supportsAllDrives: true,
     });
     // webViewLink doesn't change on content update, so we can return what
     // we already had — but re-fetch in case the list call returned an empty
     // string (Drive sometimes omits webViewLink without explicit fields).
     let link = existing.webViewLink;
     if (!link) {
-      const meta = await drive.files.get({ fileId: existing.fileId, fields: 'webViewLink' });
+      const meta = await drive.files.get({
+        fileId: existing.fileId,
+        fields: 'webViewLink',
+        supportsAllDrives: true,
+      });
       link = meta.data.webViewLink || `https://drive.google.com/file/d/${existing.fileId}/view`;
     }
     return { fileId: existing.fileId, webViewLink: link, created: false };
@@ -87,6 +96,7 @@ export async function saveTranscript(conversationId: string, markdown: string): 
       body: bodyStream,
     },
     fields: 'id, webViewLink',
+    supportsAllDrives: true,
   });
   const fileId = createResp.data.id || '';
   const webViewLink = createResp.data.webViewLink || `https://drive.google.com/file/d/${fileId}/view`;

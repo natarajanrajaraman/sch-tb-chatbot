@@ -30,6 +30,9 @@ export async function GET(request: NextRequest) {
       fields: 'files(id, webViewLink)',
       spaces: 'drive',
       pageSize: 1,
+      // Shared Drive support
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
     });
     const f = resp.data.files?.[0];
     if (!f?.id) {
