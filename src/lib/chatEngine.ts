@@ -8,7 +8,7 @@ import { BOT_MESSAGES } from '@/data/messages';
 import { t } from './textRegistry';
 import { getStates, getDistricts, getTownships } from './locationRegistry';
 
-export const BOT_VERSION = '1.7.4';
+export const BOT_VERSION = '1.7.5';
 
 export type ConversationState =
   | 'LANDING'

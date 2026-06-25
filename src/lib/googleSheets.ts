@@ -23,13 +23,80 @@ function getSheets() {
 
 export async function appendToSheet(sheetName: string, values: string[][]): Promise<void> {
   const sheets = getSheets();
-  await sheets.spreadsheets.values.append({
+  const result = await sheets.spreadsheets.values.append({
     spreadsheetId: SPREADSHEET_ID,
     range: `${sheetName}!A:Z`,
     valueInputOption: 'RAW',
     requestBody: { values },
   });
+
+  // v1.7.5 — copy row 2's formatting onto the just-appended row(s).
+  // Raj's Apps Script `onChange` INSERT_ROW trigger doesn't fire for
+  // `values.append` writes (the change-type for API writes is OTHER),
+  // so the formatting has to happen server-side. Non-fatal on error —
+  // append already succeeded, formatting is cosmetic.
+  try {
+    const updatedRange = result.data.updates?.updatedRange;
+    if (!updatedRange) return;
+    // updatedRange is "'Sheet Name'!A5:K5" or "Sheet!A5:K5"
+    const m = updatedRange.match(/!A(\d+):[A-Z]+(\d+)$/);
+    if (!m) return;
+    const startRow = parseInt(m[1], 10); // 1-indexed
+    const endRow = parseInt(m[2], 10);
+    if (startRow <= 2) return; // nothing to inherit from yet — row 2 IS the new row
+    const meta = await getCachedSheetMeta();
+    const sheetMeta = meta.get(sheetName);
+    if (!sheetMeta) return;
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: SPREADSHEET_ID,
+      requestBody: {
+        requests: [{
+          copyPaste: {
+            source: {
+              sheetId: sheetMeta.sheetId,
+              startRowIndex: 1, // row 2 (0-indexed)
+              endRowIndex: 2,
+              startColumnIndex: 0,
+              endColumnIndex: sheetMeta.columnCount,
+            },
+            destination: {
+              sheetId: sheetMeta.sheetId,
+              startRowIndex: startRow - 1,
+              endRowIndex: endRow,
+              startColumnIndex: 0,
+              endColumnIndex: sheetMeta.columnCount,
+            },
+            pasteType: 'PASTE_FORMAT',
+            pasteOrientation: 'NORMAL',
+          },
+        }],
+      },
+    });
+  } catch (err) {
+    console.error('append-row format copy failed (non-fatal):', err);
+  }
 }
+
+// Module-level cache of sheet (gid, columnCount) by title. Invalidated
+// when seedHeaders adds a new tab or renameSessionsTab fires.
+let _sheetMetaCache: Map<string, { sheetId: number; columnCount: number }> | null = null;
+async function getCachedSheetMeta(): Promise<Map<string, { sheetId: number; columnCount: number }>> {
+  if (_sheetMetaCache) return _sheetMetaCache;
+  const sheets = getSheets();
+  const meta = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID });
+  const out = new Map<string, { sheetId: number; columnCount: number }>();
+  for (const s of meta.data.sheets || []) {
+    const title = s.properties?.title;
+    const sheetId = s.properties?.sheetId;
+    const columnCount = s.properties?.gridProperties?.columnCount;
+    if (title && sheetId != null && columnCount != null) {
+      out.set(title, { sheetId, columnCount });
+    }
+  }
+  _sheetMetaCache = out;
+  return out;
+}
+function invalidateSheetMetaCache() { _sheetMetaCache = null; }
 
 export async function getSheetValues(sheetName: string, range: string): Promise<string[][]> {
   const sheets = getSheets();
@@ -328,6 +395,7 @@ export async function renameSessionsTab(): Promise<{ renamed: boolean; alreadyDo
       }],
     },
   });
+  invalidateSheetMetaCache();
   return { renamed: true, alreadyDone: false };
 }
 
@@ -520,6 +588,12 @@ export async function updateCareReferralLog(
   const editableCols = ['careProviderName', 'careProviderTownship', 'careProviderContact', 'reasonForReferral', 'status', 'followUpDate', 'notes', 'patientTbCaseId', 'patientContact', 'removalReason', 'removedAt', 'snoozeUntil'];
   const values = [editableCols.map(c => patch[c] ?? allData[rowIndex][CARE_REFERRAL_LOG_HEADERS.indexOf(c)] ?? '')];
   await updateSheetCells('Care Referral Log', `G${sheetRow}:R${sheetRow}`, values);
+  // v1.7.5 — clientName lives in column D (outside the G..R editable
+  // range). Patch it separately when the caller supplied it (the P3
+  // escalation flow now asks the patient for their name).
+  if (typeof patch.clientName === 'string') {
+    await updateSheetCells('Care Referral Log', `D${sheetRow}`, [[patch.clientName]]);
+  }
   return true;
 }
 
@@ -674,6 +748,7 @@ export async function seedHeaders(
     });
     out.push({ sheet: sheetName, created, headerWritten: true });
   }
+  if (out.some(o => o.created)) invalidateSheetMetaCache();
   return out;
 }
 

@@ -299,8 +299,9 @@ export default function P3ChatPanel({ theme, modelId, platformView, systemPrompt
   // minted by /api/p3/chat, then appends a clear acknowledgment whose
   // wording depends on whether the user provided contact info (so the bot
   // doesn't falsely promise a callback when no contact was actually shared).
-  const handleEscalationSubmit = (caseId: string, contact: string, currentProviderId: string) => {
+  const handleEscalationSubmit = (name: string, caseId: string, contact: string, currentProviderId: string) => {
     if (!pendingEscalationPrompt || pendingEscalationPrompt.step !== 'collect-info') return;
+    const txtName = name.trim();
     const txtCase = caseId.trim();
     const txtContact = contact.trim();
     const txtProvider = currentProviderId.trim();
@@ -309,6 +310,7 @@ export default function P3ChatPanel({ theme, modelId, platformView, systemPrompt
 
     // Echo the user's submission as a user turn (Mm + En)
     const parts: { mm: string; en: string }[] = [];
+    if (txtName) parts.push({ mm: `နာမည်: ${txtName}`, en: `Name: ${txtName}` });
     if (txtCase) parts.push({ mm: `တီဘီ Case ID: ${txtCase}`, en: `TB Case ID: ${txtCase}` });
     if (txtContact) parts.push({ mm: `ဆက်သွယ်ရန် အချက်အလက်: ${txtContact}`, en: `Contact: ${txtContact}` });
     if (txtProvider) parts.push({ mm: `လက်ရှိ TB Provider ID: ${txtProvider}`, en: `Current TB Provider ID: ${txtProvider}` });
@@ -329,6 +331,7 @@ export default function P3ChatPanel({ theme, modelId, platformView, systemPrompt
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         careReferralId,
+        ...(txtName ? { clientName: txtName } : {}),
         ...(txtCase ? { patientTbCaseId: txtCase } : {}),
         ...(txtContact ? { patientContact: txtContact } : {}),
         notes: `referralMode: ${mode}${txtProvider ? ` · currentProviderId: ${txtProvider}` : ''}`,
@@ -610,9 +613,11 @@ function EscalationContactPrompt({
   theme: PlatformTheme;
   careReferralId: string;
   mode: 'assisted' | 'self';
-  onSubmit: (caseId: string, contact: string, currentProviderId: string) => void;
+  // v1.7.5 — added `name` so Tele-Health knows who they're calling.
+  onSubmit: (name: string, caseId: string, contact: string, currentProviderId: string) => void;
   onFindNewProvider?: () => void;
 }) {
+  const [name, setName] = useState('');
   const [caseId, setCaseId] = useState('');
   const [contact, setContact] = useState('');
   const [providerId, setProviderId] = useState('');
@@ -644,6 +649,19 @@ function EscalationContactPrompt({
             <span>{headerMm}</span>
             <br />
             <span className="text-[11px] opacity-70">{headerEn}</span>
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-medium uppercase tracking-wide mb-0.5 opacity-80">
+              Name {mode === 'assisted' ? '(recommended)' : '(optional)'}
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="Your name"
+              className="w-full px-2 py-1.5 text-xs border rounded focus:ring-1 focus:ring-blue-400 outline-none"
+            />
           </div>
 
           <div>
@@ -701,7 +719,7 @@ function EscalationContactPrompt({
           <div className="flex gap-2 pt-1">
             <button
               type="button"
-              onClick={() => onSubmit(caseId, contact, providerId)}
+              onClick={() => onSubmit(name, caseId, contact, providerId)}
               disabled={submitDisabled}
               className="px-3 py-1.5 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-40"
               title={mode === 'assisted' ? 'Contact info is required for SCH Tele-Health to reach you.' : undefined}
@@ -710,7 +728,7 @@ function EscalationContactPrompt({
             </button>
             <button
               type="button"
-              onClick={() => onSubmit('', '', '')}
+              onClick={() => onSubmit('', '', '', '')}
               className="px-3 py-1.5 bg-gray-200 text-gray-700 text-xs rounded hover:bg-gray-300"
               title="Skip all fields. SCH Tele-Health will not be able to reach you directly."
             >
