@@ -45,8 +45,14 @@ export default function TelehealthDashboard({ screeningData, careData, alertsDat
     const cRows = careData.slice(1);
     const aRows = (alertsData[0] ? alertsData.slice(1) : alertsData) || [];
 
-    const screeningJourneys: JourneyState[] = sRows.map(r => computeSelfCheckJourney(r, sHeaders));
-    const careJourneys: JourneyState[] = cRows.map(r => computePatientSupportJourney(r, cHeaders));
+    // v1.6.1 — drop empty rows (no recordId) before classification so they
+    // don't pollute the outcome counts.
+    const screeningJourneys: JourneyState[] = sRows
+      .map(r => computeSelfCheckJourney(r, sHeaders))
+      .filter(j => !!j.recordId);
+    const careJourneys: JourneyState[] = cRows
+      .map(r => computePatientSupportJourney(r, cHeaders))
+      .filter(j => !!j.recordId);
 
     // Overdue task queue — union across both pathways. The label points
     // to the most-overdue stage on each record so Tele-Health knows what

@@ -252,22 +252,25 @@ function statusFor(row: string[], headers: string[]): {
   isSnoozed: boolean;
 } {
   const j = computeSelfCheckJourney(row, headers);
-  // Highlight the most-recent overdue stage in the label if applicable.
-  const overdueStage = j.stages.find(s => s.status === 'overdue');
-  const inProgressStage = j.stages.find(s => s.status === 'in-progress');
   if (j.bucket === 'abandoned') {
     return { bucket: 'abandoned', label: `Abandoned · ${j.removalReason}`, isSnoozed: false };
   }
   if (j.bucket === 'completed') {
     return { bucket: 'completed', label: 'Pathway complete', isSnoozed: false };
   }
-  if (j.bucket === 'overdue' && overdueStage) {
-    const days = overdueStage.ageDays ?? '?';
-    return { bucket: 'overdue', label: `Overdue · ${overdueStage.label} (${days}d)`, isSnoozed: false };
+  if (j.bucket === 'overdue') {
+    const overdueStage = j.stages.find(s => s.status === 'overdue');
+    const days = overdueStage?.ageDays ?? '?';
+    const label = overdueStage ? `Overdue · ${overdueStage.label} (${days}d)` : 'Overdue';
+    return { bucket: 'overdue', label, isSnoozed: false };
   }
-  if (j.bucket === 'in-progress' && inProgressStage) {
+  if (j.bucket === 'in-progress') {
+    // Prefer the actively-worked-on stage; fall back to the next stage waiting.
+    const stage = j.stages.find(s => s.status === 'in-progress')
+      || j.stages.find(s => s.status === 'not-started');
+    const stageLabel = stage?.label || 'In progress';
     const suffix = j.isSnoozed ? ` · snoozed to ${j.snoozedUntil}` : '';
-    return { bucket: 'in-progress', label: `${inProgressStage.label}${suffix}`, isSnoozed: j.isSnoozed };
+    return { bucket: 'in-progress', label: `${stageLabel}${suffix}`, isSnoozed: j.isSnoozed };
   }
   return { bucket: 'not-started', label: BUCKET_LABEL['not-started'], isSnoozed: false };
 }
@@ -306,7 +309,13 @@ export default function ScreeningReferralLogTable({
   const expandedRowRef = useRef<HTMLTableRowElement | null>(null);
 
   const headers = data[0] || [];
-  const allRows = useMemo(() => data.slice(1), [data]);
+  // v1.6.1 — drop empty rows (no screeningReferralId in column A). These
+  // showed up as phantom "Not yet started" entries because Sheets returns
+  // trailing-formatted rows even when their cells are blank.
+  const allRows = useMemo(
+    () => data.slice(1).filter(r => (r[0] || '').trim() !== ''),
+    [data]
+  );
 
   // Auto-expand a record when the parent (Dashboard click) sets expandRecordId.
   useEffect(() => {

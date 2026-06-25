@@ -483,10 +483,15 @@ function DashboardView({
   careReferralLogs: string[][];
 }) {
   // v1.6 — Per-record journey state for the two outcome cards.
+  // v1.6.1 — filter empty rows so phantom blanks don't pollute the buckets.
   const screeningHeaders = referralLogs[0] || [];
-  const screeningJourneys = referralLogs.slice(1).map(r => computeSelfCheckJourney(r, screeningHeaders));
+  const screeningJourneys = referralLogs.slice(1)
+    .map(r => computeSelfCheckJourney(r, screeningHeaders))
+    .filter(j => !!j.recordId);
   const careHeaders = careReferralLogs[0] || [];
-  const careJourneys = careReferralLogs.slice(1).map(r => computePatientSupportJourney(r, careHeaders));
+  const careJourneys = careReferralLogs.slice(1)
+    .map(r => computePatientSupportJourney(r, careHeaders))
+    .filter(j => !!j.recordId);
 
   const selfCheckCards = [
     { label: 'Total Self-Checks', value: stats.totalSelfChecks, color: 'bg-blue-500' },
