@@ -1,6 +1,6 @@
 # SCH TB Chatbot Prototype — User Guide
 
-**Prototype version:** v1.5.0
+**Prototype version:** v1.6.0
 **Last updated:** 2026-06-25
 
 > This guide is auto-managed by the engineering team. Sections between
@@ -267,7 +267,46 @@ Tele-Health can also **back-fill** screening-provider and care-provider fields i
 
 **Date auto-fill:** When your team opens a record, a small **"stamp today"** button appears next to your role's date fields. Click it to fill in today's date. You can edit before saving.
 
-### 4.8 SLA thresholds (pending SCH confirmation)
+### 4.8 The two outcome rollups
+
+The dashboard now shows two big summary cards — one per pathway — so anyone can see at a glance how many patients are progressing, stuck, or abandoned.
+
+**Self-Check Outcome** — the Tele-Health team's rollup for all TB Self-Check Tool referrals. It groups every patient into one of five buckets:
+
+| Bucket | What it means |
+|---|---|
+| **Not yet started** | The referral exists, but no team has touched it yet. |
+| **In progress** | A team is actively moving the patient forward and is still inside the 7-day SLA on their current stage. |
+| **Overdue** | The patient is stuck on a stage for **more than 7 days**. Action needed by the Tele-Health team. |
+| **Completed** | The patient has cleared every applicable stage of the journey. |
+| **Abandoned** | The case was closed without finishing — see the reason field (lost-to-follow-up, declined, moved away, deceased, other). |
+
+**Patient Support Outcome** — the same five buckets, but for the TB Patient Support Chatbot escalations on the Care Referral Log.
+
+Below each outcome card is a **per-stage breakdown table**: one row per stage in the pathway, showing how many patients are in progress, overdue, or completed at that step. Click any bucket card to filter the table to just that bucket.
+
+### 4.9 Mark Abandoned — closing a case
+
+When a patient cannot be moved through the journey (cannot be reached, refuses care, has moved or died), the Tele-Health team can **mark them as Abandoned**. Open the record and use the **"Mark Abandoned"** field; pick one of the reasons:
+
+- **Lost to follow-up** — could not be reached after several contact attempts.
+- **Declined screening** — refused to be screened.
+- **Declined care** — was screened but refused treatment.
+- **Moved away** — moved out of SCH's catchment area.
+- **Deceased** — patient died.
+- **Other** — explain in Remarks.
+
+The system also stamps the date of removal. Marked-Abandoned cases drop out of the active list and join the Abandoned bucket on the dashboard. Tele-Health is the only team that can mark a case as Abandoned (plus Admin).
+
+### 4.10 Snooze — waiting on a contacted patient
+
+When the Tele-Health team has spoken to the patient and the patient asked to be contacted later (or asked for time to think), the team can **snooze** the case. Snoozed cases sit out of the Overdue bucket until the snooze date passes.
+
+- Use the **"Snooze until"** date field on the record. Quick buttons **+7d** and **+14d** fill in 7 or 14 days from today.
+- **Automatic snooze:** every time the Tele-Health team increments "Contact Attempts", the system silently adds 7 days to the snooze, so a freshly-contacted patient does not show as overdue. This can be overridden with the date field.
+- Click **clear** next to the snooze field to remove a snooze early.
+
+### 4.11 SLA thresholds (pending SCH confirmation)
 
 Each stage of the patient journey has a **time limit** before it becomes "overdue". If a stage stays in progress longer than the limit, the case is flagged as **Overdue** on the dashboard — the Tele-Health team should act.
 
@@ -282,11 +321,11 @@ Each stage of the patient journey has a **time limit** before it becomes "overdu
 
 These thresholds are a **starting point** and need to be confirmed by SCH (see the KZ discussion-points doc). The Tele-Health team can also **snooze** a case for a set number of days when a patient has been contacted and is just waiting; snoozed cases sit out of the overdue bucket until the wait period passes. (v1.6 ships the snooze button.)
 
-### 4.9 Test login
+### 4.12 Test login
 
 For all roles, the test username is `123` and the password is `abc`. This is only for the prototype. The real product will have proper logins.
 
-### 4.10 Known limits
+### 4.13 Known limits
 
 - This is a **test version**. Do not use it for real patient care.
 - The chatbot is **not** a doctor. It can answer general questions but it can be wrong.
@@ -326,6 +365,7 @@ A: Not directly. The engineer can change them in the code. Tell the engineer wha
 
 | Version | Date | Main changes |
 |---|---|---|
+| v1.6.0 | 2026-06-25 | **Self-Check Outcome** and **Patient Support Outcome** rollups added — five clickable bucket cards (Not yet started / In progress / Overdue / Completed / Abandoned) per pathway, with a per-stage breakdown table underneath. Available on the SCH Admin and SCH Tele-Health dashboards. **Mark Abandoned** action with a six-value reason picker (lost-to-follow-up / declined-screening / declined-care / moved-away / deceased / other). **Snooze** action — explicit date picker with +7d / +14d quick buttons, plus an automatic 7-day snooze when "Contact Attempts" is incremented. The Tele-Health dashboard's old SLA buckets are replaced by the outcome rollups, an "Overdue queue" task list at the bottom, and the existing red-flag alerts panel at the top. |
 | v1.5.0 | 2026-06-25 | Screening Referral Log refactor. The old single "Outcome" field is replaced by a per-stage **Self-Check Outcome** rollup (full visualisation in v1.6). The three old date fields are replaced by **six new role-stamped dates** (Tele-Health, Screening Provider, Care Provider — first + last contact each). **Patient Dx** is now a 3-state radio (Confirmed TB +ve / Confirmed TB -ve / Pending); TB Registration ID and Date appear only when Dx = "Confirmed TB +ve". The expanded record panel is re-organised by role, with each team's fields highlighted in amber and other fields read-only for them. Yes/No and result fields are now **radio buttons** instead of drop-downs. Each role gets a "stamp today" button next to their date fields. Tele-Health can back-fill dates and fields on behalf of teams not using the digital system. SLA thresholds for overdue tracking documented in §4.8 (pending SCH confirmation). |
 | v1.4.0 | 2026-06-25 | This user guide added. Link to the guide put into the developer panel. |
 | v1.3.0 | 2026-06-24 | SCH Admin dashboard split into two sections: TB Self-Check Tool and TB Patient Support Chatbot. Cascade charts added. "Total Screenings" renamed to "Total Self-Checks". User Journeys document link added to the developer panel. |

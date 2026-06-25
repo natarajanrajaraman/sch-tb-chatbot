@@ -12,7 +12,7 @@ const REPO_BASE = 'https://github.com/natarajanrajaraman/sch-tb-chatbot/blob/mas
 // guide maintenance".
 // v1.5: recreated under a new doc id after gog markdown find-replace
 // stalled on 16KB content; the proven path is `gog docs create --file`.
-const USER_GUIDE_GDOC = 'https://docs.google.com/document/d/1wXgnv1K4DSmvIZUh4TSQ1sOZnO3vVobWc9ULZf_Khdk/edit';
+const USER_GUIDE_GDOC = 'https://docs.google.com/document/d/14YYjIlCwWrvQc9hlwoqCTwqWQHMtgvH0r24MISSdrvA/edit';
 
 type Link = { label: string; href: string; tag?: string };
 

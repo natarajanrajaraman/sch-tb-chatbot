@@ -5,6 +5,9 @@ import AuthGate from '@/components/AuthGate';
 import SpeedbackShell from '@/components/SpeedbackShell';
 import CascadeFunnel, { CascadeNode } from '@/components/dashboard/CascadeFunnel';
 import ScreeningReferralLogTable from '@/components/dashboard/ScreeningReferralLogTable';
+import OutcomeCards from '@/components/dashboard/OutcomeCards';
+import StageBreakdownTable from '@/components/dashboard/StageBreakdownTable';
+import { computeSelfCheckJourney, computePatientSupportJourney } from '@/lib/journeyState';
 
 type TabType = 'dashboard' | 'sessions' | 'feedback' | 'referral-log' | 'care-referral-log';
 
@@ -453,6 +456,8 @@ function AdminInner() {
                 byProvider={byProvider}
                 selfCheckCascade={selfCheckCascade}
                 patientSupportCascade={patientSupportCascade}
+                referralLogs={referralLogs}
+                careReferralLogs={careReferralLogs}
               />
             )}
             {activeTab === 'sessions' && <DataTable data={sessions} title="Sessions" />}
@@ -468,12 +473,21 @@ function AdminInner() {
 
 function DashboardView({
   stats, byProvider, selfCheckCascade, patientSupportCascade,
+  referralLogs, careReferralLogs,
 }: {
   stats: DashboardStats;
   byProvider: ProviderSummary[];
   selfCheckCascade: CascadeNode | null;
   patientSupportCascade: CascadeNode | null;
+  referralLogs: string[][];
+  careReferralLogs: string[][];
 }) {
+  // v1.6 — Per-record journey state for the two outcome cards.
+  const screeningHeaders = referralLogs[0] || [];
+  const screeningJourneys = referralLogs.slice(1).map(r => computeSelfCheckJourney(r, screeningHeaders));
+  const careHeaders = careReferralLogs[0] || [];
+  const careJourneys = careReferralLogs.slice(1).map(r => computePatientSupportJourney(r, careHeaders));
+
   const selfCheckCards = [
     { label: 'Total Self-Checks', value: stats.totalSelfChecks, color: 'bg-blue-500' },
     { label: 'Completed', value: stats.completedScreenings, color: 'bg-green-500' },
@@ -529,6 +543,15 @@ function DashboardView({
             />
           </div>
         )}
+
+        {/* v1.6 — Self-Check Outcome (Tele-Health rollup) + per-stage breakdown */}
+        <div className="space-y-3 mb-6">
+          <OutcomeCards
+            title="Self-Check Outcome — Tele-Health's rollup per Screening Referral"
+            journeys={screeningJourneys}
+          />
+          <StageBreakdownTable title="Per-stage breakdown" journeys={screeningJourneys} />
+        </div>
 
         {/* Referrals by destination provider / township */}
         <div>
@@ -587,7 +610,7 @@ function DashboardView({
         </div>
 
         {patientSupportCascade && (
-          <div>
+          <div className="mb-6">
             <CascadeFunnel
               title="Patient-support cascade"
               subtitle="Total → Escalation → Care referral → Contacted → Reached care provider"
@@ -596,6 +619,15 @@ function DashboardView({
             />
           </div>
         )}
+
+        {/* v1.6 — Patient Support Outcome (Tele-Health rollup) + per-stage breakdown */}
+        <div className="space-y-3">
+          <OutcomeCards
+            title="Patient Support Outcome — Tele-Health's rollup per Care Referral"
+            journeys={careJourneys}
+          />
+          <StageBreakdownTable title="Per-stage breakdown" journeys={careJourneys} />
+        </div>
       </section>
 
       {stats.totalSelfChecks === 0 && stats.totalP3Conversations === 0 && (

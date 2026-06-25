@@ -216,43 +216,11 @@ export async function getAllFeedback(): Promise<string[][]> {
   }
 }
 
-// v1.5 Screening Referral Log schema.
-// Retired in v1.5: `outcome` (replaced by computed Self-Check Outcome —
-// see USER-GUIDE §4.8 "Patient journey — conceptual model"),
-// `firstContactDate` / `firstFollowupDate` / `lastFollowupDate` (replaced
-// by 6 role-stamped date columns). The retired columns are wiped on
-// migration via /api/admin/migrate-screening-log.
-//
-// `removalReason` / `removedAt` / `snoozeUntil` are written-but-not-yet-
-// read in v1.5; the v1.6 journey-state computation consumes them.
-export const REFERRAL_LOG_HEADERS = [
-  // A-L  — column A renamed referralId → screeningReferralId in v0.8 to
-  // disambiguate from careReferralId on the Care Referral Log tab.
-  'screeningReferralId', 'conversationId', 'timestamp', 'clientName',
-  'clientAge', 'clientGender', 'referralType', 'township',
-  'facilityNames', 'referred', 'status', 'screeningId',
-  // M-T  (Tele-Health-owned + Screening-Provider-owned action fields)
-  'contactAttempts', 'clientContacted', 'referralGivenByTelehealth',
-  'arrivedAtCenter', 'cxrCompleted', 'cxrResult',
-  'xpertCompleted', 'xpertResult',
-  // U-W  (final diagnosis — gated on patientDx = 'Confirmed TB +ve')
-  'patientDx',          // Confirmed TB +ve / Confirmed TB -ve / Pending
-  'tbRegistrationId',
-  'tbRegistrationDate',
-  // X-AC  (6 role-stamped contact dates introduced in v1.5)
-  'firstContactTelehealthDate',
-  'lastContactTelehealthDate',
-  'firstContactScreeningProviderDate',
-  'lastContactScreeningProviderDate',
-  'firstContactCareProviderDate',
-  'lastContactCareProviderDate',
-  // AD-AF  (removal + snooze — written in v1.5, consumed by v1.6 journey state)
-  'removalReason',      // '' / lost-to-followup / declined-screening / declined-care / moved-away / deceased / other
-  'removedAt',          // ISO timestamp set when removalReason is set
-  'snoozeUntil',        // ISO date — Tele-Health "wait until" gate
-  // AG
-  'remarks',
-];
+// v1.5 Screening Referral Log schema. Re-exported from ./schemas (the
+// pure constants module client components import from) so server code
+// keeps a single source for the headers.
+export { REFERRAL_LOG_HEADERS } from './schemas';
+import { REFERRAL_LOG_HEADERS } from './schemas';
 
 export interface ReferralFollowUp {
   contactAttempts?: string;
@@ -353,23 +321,9 @@ export async function clearScreeningReferralLogDataRows(): Promise<void> {
 //   K  status              (Pending / Contacted / In Care / Closed / Lost)
 //   L  followUpDate
 //   M  notes
-export const CARE_REFERRAL_LOG_HEADERS = [
-  'careReferralId', 'conversationId', 'timestamp',
-  'clientName', 'clientAge', 'clientGender',
-  'careProviderName', 'careProviderTownship', 'careProviderContact',
-  'reasonForReferral',
-  'status', 'followUpDate', 'notes',
-  // v0.9 — patient-provided TB case ID, captured ONLY at care-referral
-  // time (with explicit Skip). Never linked across sessions. Optional.
-  'patientTbCaseId',
-  // v0.9.3 — patient-provided contact info (phone / Viber number /
-  // similar) needed for SCH Tele-Health to actually reach the user.
-  // Same posture as patientTbCaseId: optional, explicit Skip,
-  // per-row only. Without this, the bot is no longer allowed to
-  // promise a callback — it directs the user to contact Tele-Health
-  // themselves.
-  'patientContact',
-];
+// Re-exported from ./schemas (see comment on REFERRAL_LOG_HEADERS above).
+export { CARE_REFERRAL_LOG_HEADERS } from './schemas';
+import { CARE_REFERRAL_LOG_HEADERS } from './schemas';
 
 export async function saveCareReferralLog(row: Record<string, string>): Promise<void> {
   const ordered = CARE_REFERRAL_LOG_HEADERS.map(h => row[h] || '');
@@ -517,7 +471,7 @@ export async function getAllP3Conversations(): Promise<string[][]> {
 
 export async function getAllCareReferralLogs(): Promise<string[][]> {
   try {
-    return await getSheetValues('Care Referral Log', 'A1:O2000');
+    return await getSheetValues('Care Referral Log', 'A1:R2000');
   } catch {
     return [];
   }
@@ -527,14 +481,14 @@ export async function updateCareReferralLog(
   careReferralId: string,
   patch: Partial<Record<string, string>>
 ): Promise<boolean> {
-  const allData = await getSheetValues('Care Referral Log', 'A1:O2000');
+  const allData = await getSheetValues('Care Referral Log', 'A1:R2000');
   const rowIndex = allData.findIndex(row => row[0] === careReferralId);
   if (rowIndex < 0) return false;
   const sheetRow = rowIndex + 1;
-  // Update G..O cells (careProviderName .. patientContact)
-  const editableCols = ['careProviderName', 'careProviderTownship', 'careProviderContact', 'reasonForReferral', 'status', 'followUpDate', 'notes', 'patientTbCaseId', 'patientContact'];
+  // Update G..R cells (careProviderName .. snoozeUntil)
+  const editableCols = ['careProviderName', 'careProviderTownship', 'careProviderContact', 'reasonForReferral', 'status', 'followUpDate', 'notes', 'patientTbCaseId', 'patientContact', 'removalReason', 'removedAt', 'snoozeUntil'];
   const values = [editableCols.map(c => patch[c] ?? allData[rowIndex][CARE_REFERRAL_LOG_HEADERS.indexOf(c)] ?? '')];
-  await updateSheetCells('Care Referral Log', `G${sheetRow}:O${sheetRow}`, values);
+  await updateSheetCells('Care Referral Log', `G${sheetRow}:R${sheetRow}`, values);
   return true;
 }
 

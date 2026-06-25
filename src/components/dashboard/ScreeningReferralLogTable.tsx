@@ -3,6 +3,13 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { downloadCSV } from './DataTable';
 import TranscriptLink from './TranscriptLink';
+import {
+  computeSelfCheckJourney,
+  BUCKET_LABEL,
+  BUCKET_BADGE,
+  REMOVAL_REASONS,
+  type OverallBucket,
+} from '@/lib/journeyState';
 
 // v1.5 — Per-role editability + radio inputs + 6-date split.
 // The v0.7 single-enum `outcome` column is retired (see USER-GUIDE §4.8
@@ -27,6 +34,11 @@ interface FieldConfig {
   // For date fields: the role that gets a "Today" auto-fill button +
   // gentle prompt to stamp the date as today.
   autoStampFor?: UserRole;
+  // For date fields: always offer a "stamp today" button regardless of
+  // role (used for removedAt + snoozeUntil where any editor may set).
+  alwaysOfferStampToday?: boolean;
+  // For snoozeUntil — offer "+7d" / "+14d" quick buttons.
+  offerSnoozeQuick?: boolean;
   // Conditional visibility — receives current edit values; returns false to
   // hide the field. Used for the Patient Dx → TB Registration gating.
   visibleIf?: (values: Record<string, string>) => boolean;
@@ -166,6 +178,29 @@ const FIELDS: FieldConfig[] = [
     autoStampFor: 'care-provider',
   },
 
+  // v1.6 — Removal + snooze (Admin + Tele-Health only). When set, these
+  // change the row's overall journey-state bucket.
+  {
+    key: 'removalReason', label: 'Mark Abandoned (reason)', col: 29,
+    type: 'radio',
+    options: REMOVAL_REASONS.map(r => ({ value: r.value, label: r.label })),
+    editableBy: ['admin', 'telehealth'],
+  },
+  {
+    key: 'removedAt', label: 'Abandoned on', col: 30,
+    type: 'date',
+    editableBy: ['admin', 'telehealth'],
+    alwaysOfferStampToday: true,
+    visibleIf: v => !!v.removalReason,
+  },
+  {
+    key: 'snoozeUntil', label: 'Snooze until (suppresses overdue)', col: 31,
+    type: 'date',
+    editableBy: ['admin', 'telehealth'],
+    alwaysOfferStampToday: false,
+    offerSnoozeQuick: true,
+  },
+
   // Notes — anyone
   {
     key: 'remarks', label: 'Remarks', col: 32,
@@ -198,54 +233,43 @@ const GROUPS: FieldGroup[] = [
     fields: ['firstContactCareProviderDate', 'lastContactCareProviderDate'],
   },
   {
+    title: 'Tracking — abandon or snooze',
+    description: 'Tele-Health and Admin only. "Mark Abandoned" drops the patient out of the active list with a reason. "Snooze" hides the row from the Overdue bucket until the date you pick.',
+    fields: ['removalReason', 'removedAt', 'snoozeUntil'],
+  },
+  {
     title: 'Notes',
     description: 'Free-text notes visible to all roles.',
     fields: ['remarks'],
   },
 ];
 
-type StatusBucket = 'unset' | 'engaged' | 'overdue' | 'resolved' | 'abandoned';
-
-const STATUS_LABEL: Record<StatusBucket, string> = {
-  unset: 'No Tele-Health contact yet',
-  engaged: 'Within 7-day window',
-  overdue: 'Overdue (>7 days)',
-  resolved: 'Resolved',
-  abandoned: 'Abandoned',
-};
-
-const STATUS_BG: Record<StatusBucket, string> = {
-  unset: 'bg-gray-200 text-gray-700',
-  engaged: 'bg-blue-100 text-blue-800',
-  overdue: 'bg-red-100 text-red-800 font-semibold',
-  resolved: 'bg-emerald-100 text-emerald-800',
-  abandoned: 'bg-gray-100 text-gray-600',
-};
-
-// v1.5 placeholder for the v1.6 journey-state computation. Reads from the
-// new fields so the badge doesn't break, but the per-stage rollup is not
-// here yet.
-function statusFor(row: string[]): { bucket: StatusBucket; label: string } {
-  const contactAttempts = parseInt((row[12] || '0').trim(), 10) || 0;
-  const clientContacted = (row[13] || '').trim();
-  const arrived = (row[15] || '').trim();
-  const patientDx = (row[20] || '').trim();
-  const firstContactTelehealth = (row[23] || '').trim();
-  const removalReason = (row[29] || '').trim();
-  const timestamp = (row[2] || '').trim();
-
-  if (removalReason) return { bucket: 'abandoned', label: `Abandoned · ${removalReason}` };
-  if (arrived === 'Yes' || patientDx === 'Confirmed TB +ve' || patientDx === 'Confirmed TB -ve') {
-    return { bucket: 'resolved', label: patientDx || 'Reached centre' };
+// v1.6 — Bucket counts come from computeSelfCheckJourney (in journeyState.ts).
+// The badge for an in-progress row that's snoozed gets the "Snoozed" affordance.
+function statusFor(row: string[], headers: string[]): {
+  bucket: OverallBucket;
+  label: string;
+  isSnoozed: boolean;
+} {
+  const j = computeSelfCheckJourney(row, headers);
+  // Highlight the most-recent overdue stage in the label if applicable.
+  const overdueStage = j.stages.find(s => s.status === 'overdue');
+  const inProgressStage = j.stages.find(s => s.status === 'in-progress');
+  if (j.bucket === 'abandoned') {
+    return { bucket: 'abandoned', label: `Abandoned · ${j.removalReason}`, isSnoozed: false };
   }
-  const engaged = !!firstContactTelehealth || contactAttempts > 0 || clientContacted === 'Yes';
-  if (!engaged) return { bucket: 'unset', label: STATUS_LABEL.unset };
-  const startStr = firstContactTelehealth || timestamp;
-  const start = new Date(startStr);
-  if (isNaN(start.getTime())) return { bucket: 'engaged', label: 'Engaged (no date)' };
-  const days = Math.floor((Date.now() - start.getTime()) / 86_400_000);
-  if (days <= 7) return { bucket: 'engaged', label: `${days}d engaged` };
-  return { bucket: 'overdue', label: `${days}d — overdue` };
+  if (j.bucket === 'completed') {
+    return { bucket: 'completed', label: 'Pathway complete', isSnoozed: false };
+  }
+  if (j.bucket === 'overdue' && overdueStage) {
+    const days = overdueStage.ageDays ?? '?';
+    return { bucket: 'overdue', label: `Overdue · ${overdueStage.label} (${days}d)`, isSnoozed: false };
+  }
+  if (j.bucket === 'in-progress' && inProgressStage) {
+    const suffix = j.isSnoozed ? ` · snoozed to ${j.snoozedUntil}` : '';
+    return { bucket: 'in-progress', label: `${inProgressStage.label}${suffix}`, isSnoozed: j.isSnoozed };
+  }
+  return { bucket: 'not-started', label: BUCKET_LABEL['not-started'], isSnoozed: false };
 }
 
 function todayISO(): string {
@@ -315,10 +339,10 @@ export default function ScreeningReferralLogTable({
 
   // Counters for the status banner
   const statusCounts = rows.reduce((acc, r) => {
-    const s = statusFor(r).bucket;
+    const s = statusFor(r, headers).bucket;
     acc[s] = (acc[s] || 0) + 1;
     return acc;
-  }, {} as Record<StatusBucket, number>);
+  }, {} as Record<OverallBucket, number>);
 
   const handleExpand = (rowIdx: number) => {
     if (!editable) return;
@@ -381,17 +405,15 @@ export default function ScreeningReferralLogTable({
         </div>
       </div>
 
-      {/* v1.5 status banner — placeholder until the v1.6 Self-Check Outcome
-          journey-state rollup ships. SLA threshold = 7 days per stage
-          (pending SCH confirmation). */}
+      {/* v1.6 Self-Check Outcome buckets — 7-day SLA per stage (pending SCH
+          confirmation; see KZ-DISCUSSION-POINTS §6). */}
       <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px]">
-        <span className="text-gray-600 font-medium">Status (7-day SLA):</span>
-        {(['unset', 'engaged', 'overdue', 'resolved', 'abandoned'] as StatusBucket[]).map(b => (
-          <span key={b} className={`px-2 py-0.5 rounded ${STATUS_BG[b]}`}>
-            {STATUS_LABEL[b]}: {statusCounts[b] || 0}
+        <span className="text-gray-600 font-medium">Self-Check Outcome (7-day SLA per stage):</span>
+        {(['not-started', 'in-progress', 'overdue', 'completed', 'abandoned'] as OverallBucket[]).map(b => (
+          <span key={b} className={`px-2 py-0.5 rounded ${BUCKET_BADGE[b]}`}>
+            {BUCKET_LABEL[b]}: {statusCounts[b] || 0}
           </span>
         ))}
-        <span className="text-gray-400 italic">· per-stage rollup coming in v1.6</span>
       </div>
 
       {editable && (
@@ -413,7 +435,7 @@ export default function ScreeningReferralLogTable({
           </thead>
           <tbody>
             {rows.map((row, i) => {
-              const status = statusFor(row);
+              const status = statusFor(row, headers);
               return (
                 <ScreeningReferralRow
                   key={i}
@@ -429,7 +451,7 @@ export default function ScreeningReferralLogTable({
                   onCancel={() => setExpandedRow(null)}
                   saving={saving}
                   statusLabel={status.label}
-                  statusBadge={STATUS_BG[status.bucket]}
+                  statusBadge={BUCKET_BADGE[status.bucket]}
                   rowRef={expandedRow === i ? expandedRowRef : undefined}
                 />
               );
@@ -460,6 +482,14 @@ function ScreeningReferralRow({
   statusBadge: string;
   rowRef?: React.Ref<HTMLTableRowElement>;
 }) {
+  // v1.6 — when Mark Abandoned is set without a date, stamp today.
+  useEffect(() => {
+    if (!isExpanded) return;
+    if (editValues.removalReason && !editValues.removedAt) {
+      setEditValues(prev => ({ ...prev, removedAt: todayISO() }));
+    }
+  }, [isExpanded, editValues.removalReason, editValues.removedAt, setEditValues]);
+
   return (
     <>
       <tr
@@ -564,6 +594,15 @@ function FieldEditor({ field, userRole, editValues, setEditValues }: {
   const value = editValues[field.key] || '';
   const setValue = (v: string) => setEditValues(prev => ({ ...prev, [field.key]: v }));
   const stampToday = () => setValue(todayISO());
+  const stampDaysFromNow = (n: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() + n);
+    setValue(d.toISOString().slice(0, 10));
+  };
+
+  const showStampToday =
+    canEdit &&
+    (field.autoStampFor === userRole || field.alwaysOfferStampToday);
 
   // Border + bg cues
   const ring =
@@ -575,20 +614,49 @@ function FieldEditor({ field, userRole, editValues, setEditValues }: {
 
   return (
     <div className={`${wrapperClass} rounded-md border border-gray-200 ${ring} p-2`}>
-      <div className="flex items-baseline justify-between gap-2">
+      <div className="flex items-baseline justify-between gap-2 flex-wrap">
         <label className="block text-[10px] font-medium text-gray-600 uppercase mb-1">{field.label}</label>
         {!canEdit && (
           <span className="text-[9px] text-gray-400 italic">read-only for your role</span>
         )}
-        {field.autoStampFor === userRole && canEdit && (
-          <button
-            type="button"
-            onClick={stampToday}
-            className="text-[9px] text-blue-600 hover:text-blue-800 underline"
-          >
-            stamp today
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {showStampToday && (
+            <button
+              type="button"
+              onClick={stampToday}
+              className="text-[9px] text-blue-600 hover:text-blue-800 underline"
+            >
+              stamp today
+            </button>
+          )}
+          {field.offerSnoozeQuick && canEdit && (
+            <>
+              <button
+                type="button"
+                onClick={() => stampDaysFromNow(7)}
+                className="text-[9px] text-blue-600 hover:text-blue-800 underline"
+              >
+                +7d
+              </button>
+              <button
+                type="button"
+                onClick={() => stampDaysFromNow(14)}
+                className="text-[9px] text-blue-600 hover:text-blue-800 underline"
+              >
+                +14d
+              </button>
+              {value && (
+                <button
+                  type="button"
+                  onClick={() => setValue('')}
+                  className="text-[9px] text-gray-400 hover:text-gray-600 underline"
+                >
+                  clear
+                </button>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
       {field.type === 'number' && (
