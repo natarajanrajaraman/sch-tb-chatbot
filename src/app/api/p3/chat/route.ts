@@ -3,7 +3,7 @@ import { callOpenRouter, P3ChatMessage } from '@/lib/p3/openrouter';
 import { findModel, DEFAULT_MODEL_ID, estimateCostUsd } from '@/lib/p3/models';
 import { getSystemPrompt } from '@/lib/p3/loadDocs';
 import { parseEscalationTag, ruleBasedPreCheck, maxLevel, EscalationLevel } from '@/lib/p3/escalation';
-import { saveCareReferralLog } from '@/lib/googleSheets';
+import { saveCareReferralLog, saveAlertLog } from '@/lib/googleSheets';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -53,9 +53,8 @@ export async function POST(request: NextRequest) {
     // Final level = max(LLM, rule-based)
     const finalLevel: EscalationLevel = maxLevel(preCheck.level, llmLevel);
 
-    // If escalation is immediate or telehealth, log a care referral row.
-    // For nonurgent / none, no row — only the P3 Conversations telemetry
-    // row gets updated downstream by /api/p3/conversation.
+    // If escalation is immediate or telehealth, log a care referral row +
+    // an alerts row (independent of whether the user follows through).
     let careReferralId: string | undefined;
     if (finalLevel === 'immediate' || finalLevel === 'telehealth') {
       careReferralId = `CR-${Date.now()}`;
@@ -63,6 +62,24 @@ export async function POST(request: NextRequest) {
       if (preCheck.matches.length > 0) reasonParts.push(`rule: ${preCheck.matches.join('; ')}`);
       if (llmLevel !== 'none') reasonParts.push(`llm: ${llmLevel}`);
       reasonParts.push(`level: ${finalLevel}`);
+
+      // Alerts Log row — written regardless of whether the user completes
+      // the referral flow. This is the reviewer queue.
+      try {
+        await saveAlertLog({
+          alertId: `AL-${Date.now()}`,
+          conversationId: body.p3ConversationId,
+          alertTimestamp: new Date().toISOString(),
+          mode: 'P3',
+          escalationLevel: finalLevel,
+          triggerReason: reasonParts.join(' | '),
+          userMessageSnippet: body.userMessage.slice(0, 240),
+          careReferralId,
+          // transcriptUrl is filled in later when the P3 client knows it
+        });
+      } catch (err) {
+        console.error('Alerts Log save failed:', err);
+      }
       try {
         await saveCareReferralLog({
           careReferralId,

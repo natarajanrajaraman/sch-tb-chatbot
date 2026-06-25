@@ -4,8 +4,10 @@ import { useState, useEffect, useCallback } from 'react';
 import AuthGate from '@/components/AuthGate';
 import ScreeningReferralLogTable from '@/components/dashboard/ScreeningReferralLogTable';
 import CareReferralLogTable from '@/components/dashboard/CareReferralLogTable';
+import AlertsLogTable from '@/components/dashboard/AlertsLogTable';
+import TelehealthDashboard from '@/components/dashboard/TelehealthDashboard';
 
-type TabType = 'screening' | 'care';
+type TabType = 'dashboard' | 'screening' | 'care' | 'alerts';
 
 export default function TelehealthPage() {
   return (
@@ -16,22 +18,26 @@ export default function TelehealthPage() {
 }
 
 function TelehealthInner() {
-  const [activeTab, setActiveTab] = useState<TabType>('screening');
+  const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const [screening, setScreening] = useState<string[][]>([]);
   const [care, setCare] = useState<string[][]>([]);
+  const [alerts, setAlerts] = useState<string[][]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [s, c] = await Promise.all([
+      const [s, c, a] = await Promise.all([
         fetch('/api/referral-log'),
         fetch('/api/care-referral-log'),
+        fetch('/api/alerts-log'),
       ]);
       const sj = await s.json();
       const cj = await c.json();
+      const aj = await a.json();
       setScreening(sj.data || []);
       setCare(cj.data || []);
+      setAlerts(aj.data || []);
     } catch (e) {
       console.error(e);
     }
@@ -42,9 +48,13 @@ function TelehealthInner() {
     fetchData();
   }, [fetchData]);
 
-  const tabs: { id: TabType; label: string; icon: string }[] = [
+  const openAlertCount = (alerts.length > 1 ? alerts.slice(1) : []).filter(r => !r[9] || r[9] === 'Open').length;
+
+  const tabs: { id: TabType; label: string; icon: string; badge?: number }[] = [
+    { id: 'dashboard', label: 'Dashboard', icon: '📊' },
     { id: 'screening', label: 'Screening Referral Log', icon: '🏥' },
     { id: 'care', label: 'Care Referral Log', icon: '🤝' },
+    { id: 'alerts', label: 'Alerts Log', icon: '⚠️', badge: openAlertCount },
   ];
 
   return (
@@ -52,7 +62,7 @@ function TelehealthInner() {
       <div className="bg-gray-800 text-white px-6 py-4 flex items-center justify-between">
         <div>
           <h1 className="text-lg font-bold">SCH Telehealth View — SCH TB Chatbot</h1>
-          <p className="text-xs text-gray-400">View and edit screening referrals AND care referrals for individual clients.</p>
+          <p className="text-xs text-gray-400">View + edit screening referrals, care referrals, and red-flag alerts.</p>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -72,13 +82,17 @@ function TelehealthInner() {
           <button
             key={t.id}
             onClick={() => setActiveTab(t.id)}
-            className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors ${
+            className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
               activeTab === t.id
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            {t.icon} {t.label}
+            <span>{t.icon}</span>
+            <span>{t.label}</span>
+            {t.badge != null && t.badge > 0 && (
+              <span className="ml-1 px-1.5 py-0.5 bg-red-500 text-white text-[10px] rounded">{t.badge}</span>
+            )}
           </button>
         ))}
       </div>
@@ -86,10 +100,19 @@ function TelehealthInner() {
       <div className="p-6">
         {loading ? (
           <div className="text-center py-12 text-gray-500">Loading data…</div>
+        ) : activeTab === 'dashboard' ? (
+          <TelehealthDashboard
+            screeningData={screening}
+            careData={care}
+            alertsData={alerts}
+            onJumpToTab={setActiveTab}
+          />
         ) : activeTab === 'screening' ? (
           <ScreeningReferralLogTable data={screening} onRefresh={fetchData} editable={true} />
-        ) : (
+        ) : activeTab === 'care' ? (
           <CareReferralLogTable data={care} onRefresh={fetchData} editable={true} />
+        ) : (
+          <AlertsLogTable data={alerts} onRefresh={fetchData} editable={true} />
         )}
       </div>
     </div>

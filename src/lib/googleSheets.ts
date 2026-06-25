@@ -344,6 +344,77 @@ export async function saveCareReferralLog(row: Record<string, string>): Promise<
   await appendToSheet('Care Referral Log', [ordered]);
 }
 
+// ----- Alerts Log (v1.1) -----
+// Written on every red-flag detection in /api/p3/chat regardless of
+// whether the user proceeds with a care referral. This is the human-
+// review queue separate from operational referral tracking — even
+// abandoned conversations leave a row so a reviewer can audit them.
+export const ALERTS_LOG_HEADERS = [
+  'alertId',
+  'conversationId',
+  'alertTimestamp',
+  'mode',                  // 'P1' | 'P3'
+  'escalationLevel',       // 'immediate' | 'telehealth'
+  'triggerReason',         // rule-based matches + LLM tag
+  'userMessageSnippet',    // truncated user message that triggered the flag
+  'careReferralId',        // optional — populated if a care referral row was minted in the same turn
+  'transcriptUrl',         // optional — populated once we know the Drive link
+  'reviewStatus',          // 'Open' | 'Reviewed' | 'Dismissed'
+  'reviewerNotes',
+  'reviewedAt',
+  'reviewedBy',
+];
+
+export interface AlertLogRow {
+  alertId: string;
+  conversationId: string;
+  alertTimestamp: string;
+  mode: 'P1' | 'P3';
+  escalationLevel: string;
+  triggerReason: string;
+  userMessageSnippet: string;
+  careReferralId?: string;
+  transcriptUrl?: string;
+  reviewStatus?: string;
+  reviewerNotes?: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
+}
+
+export async function saveAlertLog(row: AlertLogRow): Promise<void> {
+  const ordered = ALERTS_LOG_HEADERS.map(h => {
+    const v = (row as unknown as Record<string, string | undefined>)[h];
+    return v == null ? '' : String(v);
+  });
+  // Default review status if not provided
+  const idx = ALERTS_LOG_HEADERS.indexOf('reviewStatus');
+  if (!ordered[idx]) ordered[idx] = 'Open';
+  await appendToSheet('Alerts Log', [ordered]);
+}
+
+export async function getAllAlertsLog(): Promise<string[][]> {
+  try {
+    return await getSheetValues('Alerts Log', 'A1:M2000');
+  } catch {
+    return [];
+  }
+}
+
+export async function updateAlertLog(
+  alertId: string,
+  patch: Partial<Record<string, string>>
+): Promise<boolean> {
+  const allData = await getSheetValues('Alerts Log', 'A1:M2000');
+  const rowIndex = allData.findIndex(row => row[0] === alertId);
+  if (rowIndex < 0) return false;
+  const sheetRow = rowIndex + 1;
+  // Editable columns: J..M (reviewStatus, reviewerNotes, reviewedAt, reviewedBy)
+  const editableCols = ['reviewStatus', 'reviewerNotes', 'reviewedAt', 'reviewedBy'];
+  const values = [editableCols.map(c => patch[c] ?? allData[rowIndex][ALERTS_LOG_HEADERS.indexOf(c)] ?? '')];
+  await updateSheetCells('Alerts Log', `J${sheetRow}:M${sheetRow}`, values);
+  return true;
+}
+
 // ----- P3 Conversations (v0.9 telemetry) -----
 export const P3_CONVERSATIONS_HEADERS = [
   'p3ConversationId', 'startedAt', 'lastMessageAt',

@@ -169,7 +169,7 @@ function AdminInner() {
               rel="noopener noreferrer"
               className="text-blue-400 hover:underline"
             >
-              TB Self-Screening Chatbot — Database [PROTOTYPE] ↗
+              SCH TB Chatbot - Database [PROTOTYPE] ↗
             </a>
           </p>
         </div>
