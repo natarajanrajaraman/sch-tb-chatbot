@@ -16,7 +16,7 @@ function getClient(): OpenAI {
     baseURL: 'https://openrouter.ai/api/v1',
     defaultHeaders: {
       'HTTP-Referer': 'https://sch-tb-chatbot.vercel.app',
-      'X-Title': 'SCH TB Chatbot — P3 prototype',
+      'X-Title': 'SCH TB Chatbot - P3 prototype',
     },
   });
 }
