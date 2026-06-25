@@ -32,6 +32,12 @@ export type OverallBucket =
 export interface StageResult {
   key: string;
   label: string;
+  // v1.7 — phrases used to build the row's overall status badge.
+  // "Completed Assisted Referral, Awaiting TB Screening" reads more clearly
+  // than "TB Screening Provider Reached" when the patient has NOT actually
+  // reached the screening provider yet.
+  completedPhrase?: string;
+  awaitingPhrase?: string;
   status: StageStatus;
   // Days the stage has been open (since its start signal), if applicable.
   ageDays: number | null;
@@ -159,7 +165,9 @@ export function computeSelfCheckJourney(row: string[], headers: string[] = REFER
   const stages: StageResult[] = [
     classifyStage({
       key: 'th-contact',
-      label: 'Tele-Health first contact',
+      label: 'Tele-Health Assisted Referral Completed',
+      completedPhrase: 'Completed Assisted Referral',
+      awaitingPhrase: 'Awaiting Tele-Health Contact',
       applicable: stage1Applicable,
       prereqMet: stage1PrereqMet,
       workStarted: stage1WorkStarted,
@@ -169,7 +177,9 @@ export function computeSelfCheckJourney(row: string[], headers: string[] = REFER
     }),
     classifyStage({
       key: 'reached-sp',
-      label: 'Reached TB Screening Provider',
+      label: 'TB Screening Provider Reached',
+      completedPhrase: 'Reached TB Screening Provider',
+      awaitingPhrase: 'Awaiting TB Screening',
       applicable: true,
       prereqMet: stage2PrereqMet,
       workStarted: stage2WorkStarted,
@@ -179,7 +189,9 @@ export function computeSelfCheckJourney(row: string[], headers: string[] = REFER
     }),
     classifyStage({
       key: 'tests-resulted',
-      label: 'CXR / Xpert results entered',
+      label: 'TB Screening Resulted',
+      completedPhrase: 'TB Screening Resulted',
+      awaitingPhrase: 'Awaiting Screening Result',
       applicable: true,
       prereqMet: stage3PrereqMet,
       workStarted: stage3WorkStarted,
@@ -189,7 +201,9 @@ export function computeSelfCheckJourney(row: string[], headers: string[] = REFER
     }),
     classifyStage({
       key: 'dx-marked',
-      label: 'Patient Dx marked',
+      label: 'TB/NoTB Status Recorded',
+      completedPhrase: 'TB/NoTB Status Recorded',
+      awaitingPhrase: 'Awaiting TB/NoTB Status',
       applicable: true,
       prereqMet: stage4PrereqMet,
       workStarted: stage4WorkStarted,
@@ -199,7 +213,9 @@ export function computeSelfCheckJourney(row: string[], headers: string[] = REFER
     }),
     classifyStage({
       key: 'reached-cp',
-      label: 'Reached TB Care Provider',
+      label: 'TB: TB Care Provider Reached',
+      completedPhrase: 'TB Care Provider Reached',
+      awaitingPhrase: 'Awaiting TB Care Provider',
       applicable: stage5Applicable,
       prereqMet: stage5PrereqMet,
       workStarted: stage5WorkStarted,
@@ -266,6 +282,8 @@ export function computePatientSupportJourney(row: string[], headers: string[] = 
     classifyStage({
       key: 'th-contact',
       label: 'Tele-Health first contact',
+      completedPhrase: 'Completed Tele-Health Contact',
+      awaitingPhrase: 'Awaiting Tele-Health Contact',
       applicable: true,
       prereqMet: true,
       workStarted: false, // no partial-contact signal on the care schema
@@ -276,6 +294,8 @@ export function computePatientSupportJourney(row: string[], headers: string[] = 
     classifyStage({
       key: 'reached-cp',
       label: 'Reached TB Care Provider',
+      completedPhrase: 'Reached TB Care Provider',
+      awaitingPhrase: 'Awaiting TB Care Provider',
       applicable: true,
       prereqMet: stageADone,
       workStarted: false,
@@ -315,10 +335,13 @@ export function computePatientSupportJourney(row: string[], headers: string[] = 
 //   overdue:        not-started or in-progress past SLA (unless snoozed)
 //   completed:      done
 function classifyStage({
-  key, label, applicable, prereqMet, workStarted, done, startDate, isSnoozed, noSla,
+  key, label, completedPhrase, awaitingPhrase,
+  applicable, prereqMet, workStarted, done, startDate, isSnoozed, noSla,
 }: {
   key: string;
   label: string;
+  completedPhrase?: string;
+  awaitingPhrase?: string;
   applicable: boolean;
   prereqMet: boolean;
   workStarted: boolean;
@@ -327,17 +350,18 @@ function classifyStage({
   isSnoozed: boolean;
   noSla?: boolean;
 }): StageResult {
-  if (!applicable || !prereqMet) return { key, label, status: 'not-applicable', ageDays: null };
-  if (done) return { key, label, status: 'completed', ageDays: daysSince(startDate) };
+  const base = { key, label, completedPhrase, awaitingPhrase };
+  if (!applicable || !prereqMet) return { ...base, status: 'not-applicable', ageDays: null };
+  if (done) return { ...base, status: 'completed', ageDays: daysSince(startDate) };
 
   const days = daysSince(startDate);
   const baseStatus: StageStatus = workStarted ? 'in-progress' : 'not-started';
 
-  if (noSla) return { key, label, status: baseStatus, ageDays: days };
+  if (noSla) return { ...base, status: baseStatus, ageDays: days };
   if (days != null && days > STAGE_SLA_DAYS && !isSnoozed) {
-    return { key, label, status: 'overdue', ageDays: days };
+    return { ...base, status: 'overdue', ageDays: days };
   }
-  return { key, label, status: baseStatus, ageDays: days };
+  return { ...base, status: baseStatus, ageDays: days };
 }
 
 // v1.6.1 — overall bucket. A row is "in-progress" not just when a stage is

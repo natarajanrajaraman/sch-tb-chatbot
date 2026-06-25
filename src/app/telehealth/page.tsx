@@ -27,6 +27,10 @@ function TelehealthInner() {
   // When the dashboard wants to deep-link to a specific row in one of the
   // log tabs (so the click-target row auto-expands), it sets this id.
   const [expandRecordId, setExpandRecordId] = useState<string | null>(null);
+  // v1.7 — when an outcome card is clicked on the Dashboard, jump to the
+  // corresponding log tab and filter the table to just that bucket.
+  const [scBucketFilter, setScBucketFilter] = useState<import('@/lib/journeyState').OverallBucket | null>(null);
+  const [careBucketFilter, setCareBucketFilter] = useState<import('@/lib/journeyState').OverallBucket | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -64,7 +68,6 @@ function TelehealthInner() {
   return (
     <SpeedbackShell
       title="SCH Telehealth"
-      subtitle="View + edit screening referrals, care referrals, and red-flag alerts."
       activeView="telehealth"
       rightActions={
         <>
@@ -117,6 +120,11 @@ function TelehealthInner() {
               setActiveTab(tab);
               setExpandRecordId(recordId);
             }}
+            onJumpToBucket={(tab, bucket) => {
+              setActiveTab(tab);
+              if (tab === 'screening') setScBucketFilter(bucket);
+              else setCareBucketFilter(bucket);
+            }}
           />
         ) : activeTab === 'screening' ? (
           <ScreeningReferralLogTable
@@ -126,6 +134,8 @@ function TelehealthInner() {
             userRole="telehealth"
             expandRecordId={expandRecordId}
             onExpandHandled={() => setExpandRecordId(null)}
+            bucketFilter={scBucketFilter}
+            onClearBucketFilter={() => setScBucketFilter(null)}
           />
         ) : activeTab === 'care' ? (
           <CareReferralLogTable

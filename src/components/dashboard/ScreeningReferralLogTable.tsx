@@ -246,6 +246,9 @@ const GROUPS: FieldGroup[] = [
 
 // v1.6 — Bucket counts come from computeSelfCheckJourney (in journeyState.ts).
 // The badge for an in-progress row that's snoozed gets the "Snoozed" affordance.
+// v1.7 — describe the row in terms of what's DONE and what's WAITING. Reads
+// as "Completed X, Awaiting Y" rather than the misleading "Reached TB
+// Screening Provider" when the patient has not actually reached one yet.
 function statusFor(row: string[], headers: string[]): {
   bucket: OverallBucket;
   label: string;
@@ -258,21 +261,42 @@ function statusFor(row: string[], headers: string[]): {
   if (j.bucket === 'completed') {
     return { bucket: 'completed', label: 'Pathway complete', isSnoozed: false };
   }
+
+  // Find the last completed applicable stage + the next pending one.
+  const applicable = j.stages.filter(s => s.status !== 'not-applicable');
+  let lastCompleted: typeof j.stages[number] | undefined;
+  let nextPending: typeof j.stages[number] | undefined;
+  for (const s of applicable) {
+    if (s.status === 'completed') lastCompleted = s;
+    else if (!nextPending && (s.status === 'in-progress' || s.status === 'not-started' || s.status === 'overdue')) {
+      nextPending = s;
+    }
+  }
+  const completedPhrase = lastCompleted?.completedPhrase
+    || (lastCompleted ? `Completed ${lastCompleted.label}` : '');
+  const awaitingPhrase = nextPending?.awaitingPhrase
+    || (nextPending ? `Awaiting ${nextPending.label}` : '');
+
   if (j.bucket === 'overdue') {
-    const overdueStage = j.stages.find(s => s.status === 'overdue');
-    const days = overdueStage?.ageDays ?? '?';
-    const label = overdueStage ? `Overdue · ${overdueStage.label} (${days}d)` : 'Overdue';
-    return { bucket: 'overdue', label, isSnoozed: false };
+    const days = nextPending?.ageDays ?? '?';
+    const base = completedPhrase && awaitingPhrase
+      ? `${completedPhrase}, ${awaitingPhrase}`
+      : (awaitingPhrase || 'Overdue');
+    return { bucket: 'overdue', label: `${base} (${days}d, overdue)`, isSnoozed: false };
   }
   if (j.bucket === 'in-progress') {
-    // Prefer the actively-worked-on stage; fall back to the next stage waiting.
-    const stage = j.stages.find(s => s.status === 'in-progress')
-      || j.stages.find(s => s.status === 'not-started');
-    const stageLabel = stage?.label || 'In progress';
+    const base = completedPhrase && awaitingPhrase
+      ? `${completedPhrase}, ${awaitingPhrase}`
+      : (awaitingPhrase || completedPhrase || 'In progress');
     const suffix = j.isSnoozed ? ` · snoozed to ${j.snoozedUntil}` : '';
-    return { bucket: 'in-progress', label: `${stageLabel}${suffix}`, isSnoozed: j.isSnoozed };
+    return { bucket: 'in-progress', label: `${base}${suffix}`, isSnoozed: j.isSnoozed };
   }
-  return { bucket: 'not-started', label: BUCKET_LABEL['not-started'], isSnoozed: false };
+  // not-started
+  return {
+    bucket: 'not-started',
+    label: awaitingPhrase || BUCKET_LABEL['not-started'],
+    isSnoozed: false,
+  };
 }
 
 function todayISO(): string {
@@ -294,6 +318,8 @@ export default function ScreeningReferralLogTable({
   userRole = 'admin',
   expandRecordId,
   onExpandHandled,
+  bucketFilter,
+  onClearBucketFilter,
 }: {
   data: string[][];
   onRefresh: () => void;
@@ -301,6 +327,10 @@ export default function ScreeningReferralLogTable({
   userRole?: UserRole;
   expandRecordId?: string | null;
   onExpandHandled?: () => void;
+  // v1.7 — when set, filter the table to rows whose computed
+  // Self-Check Outcome bucket matches.
+  bucketFilter?: OverallBucket | null;
+  onClearBucketFilter?: () => void;
 }) {
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
   const [editValues, setEditValues] = useState<Record<string, string>>({});
@@ -339,12 +369,15 @@ export default function ScreeningReferralLogTable({
   }
 
   const q = search.trim().toLowerCase();
-  const rows = q
+  let rows = q
     ? allRows.filter(r =>
         (r[0] || '').toLowerCase().includes(q) ||
         (r[3] || '').toLowerCase().includes(q)
       )
     : allRows;
+  if (bucketFilter) {
+    rows = rows.filter(r => statusFor(r, headers).bucket === bucketFilter);
+  }
 
   // Counters for the status banner
   const statusCounts = rows.reduce((acc, r) => {
@@ -423,6 +456,19 @@ export default function ScreeningReferralLogTable({
             {BUCKET_LABEL[b]}: {statusCounts[b] || 0}
           </span>
         ))}
+        {bucketFilter && (
+          <span className="ml-2 px-2 py-0.5 rounded bg-blue-100 text-blue-800 flex items-center gap-1">
+            Filtered: {BUCKET_LABEL[bucketFilter]}
+            <button
+              type="button"
+              onClick={onClearBucketFilter}
+              className="ml-1 text-blue-600 hover:text-blue-800"
+              title="Clear filter"
+            >
+              ×
+            </button>
+          </span>
+        )}
       </div>
 
       {editable && (
@@ -518,38 +564,45 @@ function ScreeningReferralRow({
       </tr>
       {isExpanded && (
         <tr>
-          <td colSpan={headers.length + 2} className="bg-blue-50/50 px-6 py-4">
-            <div className="flex items-baseline justify-between mb-3 gap-3 flex-wrap">
-              <div className="text-sm font-semibold text-gray-700">Edit record — {row[0]}</div>
-              <div className="text-[11px] text-gray-500">
-                Highlighted fields = your team&rsquo;s responsibility · greyed out = read-only for your role
+          {/* v1.7 — keep the edit panel anchored to the left of the scroll
+              container so it doesn't stretch with the full table width. */}
+          <td colSpan={headers.length + 2} className="bg-blue-50/50 p-0">
+            <div
+              className="sticky left-0 px-6 py-4"
+              style={{ width: 'min(1100px, calc(100vw - 140px))' }}
+            >
+              <div className="flex items-baseline justify-between mb-3 gap-3 flex-wrap">
+                <div className="text-sm font-semibold text-gray-700">Edit record — {row[0]}</div>
+                <div className="text-[11px] text-gray-500">
+                  Highlighted fields = your team&rsquo;s responsibility · greyed out = read-only for your role
+                </div>
               </div>
-            </div>
 
-            {GROUPS.map(group => (
-              <FieldGroupBlock
-                key={group.title}
-                group={group}
-                userRole={userRole}
-                editValues={editValues}
-                setEditValues={setEditValues}
-              />
-            ))}
+              {GROUPS.map(group => (
+                <FieldGroupBlock
+                  key={group.title}
+                  group={group}
+                  userRole={userRole}
+                  editValues={editValues}
+                  setEditValues={setEditValues}
+                />
+              ))}
 
-            <div className="flex gap-2 mt-4">
-              <button
-                onClick={onSave}
-                disabled={saving}
-                className="px-4 py-1.5 bg-blue-600 text-white text-xs rounded-md hover:bg-blue-700 disabled:opacity-50"
-              >
-                {saving ? 'Saving...' : 'Save to Database'}
-              </button>
-              <button
-                onClick={onCancel}
-                className="px-4 py-1.5 bg-gray-200 text-gray-700 text-xs rounded-md hover:bg-gray-300"
-              >
-                Cancel
-              </button>
+              <div className="flex gap-2 mt-4">
+                <button
+                  onClick={onSave}
+                  disabled={saving}
+                  className="px-4 py-1.5 bg-blue-600 text-white text-xs rounded-md hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {saving ? 'Saving...' : 'Save to Database'}
+                </button>
+                <button
+                  onClick={onCancel}
+                  className="px-4 py-1.5 bg-gray-200 text-gray-700 text-xs rounded-md hover:bg-gray-300"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           </td>
         </tr>
@@ -675,7 +728,7 @@ function FieldEditor({ field, userRole, editValues, setEditValues }: {
           disabled={!canEdit}
           value={value}
           onChange={e => setValue(e.target.value)}
-          className="w-full px-2 py-1.5 text-xs border rounded focus:ring-1 focus:ring-blue-400 outline-none disabled:bg-transparent disabled:cursor-not-allowed"
+          className="w-full max-w-[140px] px-2 py-1.5 text-xs border rounded focus:ring-1 focus:ring-blue-400 outline-none disabled:bg-transparent disabled:cursor-not-allowed"
         />
       )}
       {field.type === 'text' && (
@@ -684,7 +737,7 @@ function FieldEditor({ field, userRole, editValues, setEditValues }: {
           disabled={!canEdit}
           value={value}
           onChange={e => setValue(e.target.value)}
-          className="w-full px-2 py-1.5 text-xs border rounded focus:ring-1 focus:ring-blue-400 outline-none disabled:bg-transparent disabled:cursor-not-allowed"
+          className="w-full max-w-sm px-2 py-1.5 text-xs border rounded focus:ring-1 focus:ring-blue-400 outline-none disabled:bg-transparent disabled:cursor-not-allowed"
         />
       )}
       {field.type === 'textarea' && (
@@ -693,7 +746,7 @@ function FieldEditor({ field, userRole, editValues, setEditValues }: {
           disabled={!canEdit}
           value={value}
           onChange={e => setValue(e.target.value)}
-          className="w-full px-2 py-1.5 text-xs border rounded focus:ring-1 focus:ring-blue-400 outline-none disabled:bg-transparent disabled:cursor-not-allowed"
+          className="w-full max-w-3xl px-2 py-1.5 text-xs border rounded focus:ring-1 focus:ring-blue-400 outline-none disabled:bg-transparent disabled:cursor-not-allowed"
         />
       )}
       {field.type === 'date' && (
@@ -702,7 +755,7 @@ function FieldEditor({ field, userRole, editValues, setEditValues }: {
           disabled={!canEdit}
           value={value}
           onChange={e => setValue(e.target.value)}
-          className="w-full px-2 py-1.5 text-xs border rounded focus:ring-1 focus:ring-blue-400 outline-none disabled:bg-transparent disabled:cursor-not-allowed"
+          className="w-full max-w-[180px] px-2 py-1.5 text-xs border rounded focus:ring-1 focus:ring-blue-400 outline-none disabled:bg-transparent disabled:cursor-not-allowed"
         />
       )}
       {field.type === 'radio-yesno' && (

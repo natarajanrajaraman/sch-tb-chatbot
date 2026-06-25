@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { downloadCSV } from './DataTable';
 import TranscriptLink from './TranscriptLink';
+import { computePatientSupportJourney, BUCKET_LABEL, OverallBucket } from '@/lib/journeyState';
 
 const EDITABLE_FIELDS = [
   { key: 'careProviderName', label: 'Care Provider', col: 6 },

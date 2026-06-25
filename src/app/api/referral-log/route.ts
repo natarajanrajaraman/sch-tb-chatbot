@@ -9,6 +9,8 @@ function todayPlusISO(days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+const todayISO = () => new Date().toISOString().slice(0, 10);
+
 export async function GET() {
   try {
     const data = await getAllReferralLogs();
@@ -31,23 +33,43 @@ export async function PUT(request: NextRequest) {
         { status: 400 }
       );
     }
-    // v1.6 — Implicit snooze: when contactAttempts increments without
-    // an explicit snoozeUntil in the same PUT, push the overdue clock
-    // out by IMPLICIT_SNOOZE_DAYS so the row drops out of the overdue
-    // queue. Tele-Health team gets breathing room after each contact.
+    // v1.6 / v1.7 — Implicit derivations when Tele-Health activity is
+    // detected (contactAttempts incremented, or clientContacted just set
+    // to 'Yes'):
+    //   - snoozeUntil = today + 7d (unless explicitly set in this PUT) —
+    //     drops the row out of the overdue queue for a week.
+    //   - lastContactTelehealthDate = today (unless explicitly set).
+    //   - firstContactTelehealthDate = today (only if still blank).
     let snoozeUntil: string | undefined = body.snoozeUntil;
-    if (snoozeUntil === undefined && body.contactAttempts !== undefined) {
-      const newAttempts = parseInt(String(body.contactAttempts), 10);
-      if (Number.isFinite(newAttempts) && newAttempts > 0) {
-        // Compare to the existing row's contactAttempts.
-        const all = await getAllReferralLogs();
-        const headers = all[0] || REFERRAL_LOG_HEADERS;
-        const caIdx = headers.findIndex(h => h === 'contactAttempts');
-        const row = all.slice(1).find(r => r[0] === id);
-        const prev = row ? parseInt((row[caIdx] || '0').trim(), 10) || 0 : 0;
-        if (newAttempts > prev) {
-          snoozeUntil = todayPlusISO(IMPLICIT_SNOOZE_DAYS);
-        }
+    let firstContactTelehealthDate: string | undefined = body.firstContactTelehealthDate;
+    let lastContactTelehealthDate: string | undefined = body.lastContactTelehealthDate;
+
+    const needsImplicit =
+      body.contactAttempts !== undefined ||
+      body.clientContacted === 'Yes';
+
+    if (needsImplicit) {
+      const all = await getAllReferralLogs();
+      const headers = all[0] || REFERRAL_LOG_HEADERS;
+      const caIdx = headers.findIndex(h => h === 'contactAttempts');
+      const clientContactedIdx = headers.findIndex(h => h === 'clientContacted');
+      const firstThIdx = headers.findIndex(h => h === 'firstContactTelehealthDate');
+      const row = all.slice(1).find(r => r[0] === id);
+      const prevAttempts = row ? parseInt((row[caIdx] || '0').trim(), 10) || 0 : 0;
+      const prevContacted = row ? (row[clientContactedIdx] || '').trim() : '';
+      const prevFirstTh = row ? (row[firstThIdx] || '').trim() : '';
+
+      const newAttempts = body.contactAttempts !== undefined
+        ? parseInt(String(body.contactAttempts), 10) || 0
+        : prevAttempts;
+      const attemptsBumped = newAttempts > prevAttempts;
+      const justContacted = body.clientContacted === 'Yes' && prevContacted !== 'Yes';
+      const activitySignal = attemptsBumped || justContacted;
+
+      if (activitySignal) {
+        if (snoozeUntil === undefined) snoozeUntil = todayPlusISO(IMPLICIT_SNOOZE_DAYS);
+        if (lastContactTelehealthDate === undefined) lastContactTelehealthDate = todayISO();
+        if (firstContactTelehealthDate === undefined && !prevFirstTh) firstContactTelehealthDate = todayISO();
       }
     }
 
@@ -65,10 +87,10 @@ export async function PUT(request: NextRequest) {
       patientDx: body.patientDx,
       tbRegistrationId: body.tbRegistrationId,
       tbRegistrationDate: body.tbRegistrationDate,
-      // v1.5 — 6 role-stamped contact dates (auto-suggested today by role,
-      // editable by everyone for back-fill)
-      firstContactTelehealthDate: body.firstContactTelehealthDate,
-      lastContactTelehealthDate: body.lastContactTelehealthDate,
+      // v1.5/v1.7 — 6 role-stamped contact dates. Tele-Health dates may be
+      // implicitly auto-stamped above when contact activity is detected.
+      firstContactTelehealthDate,
+      lastContactTelehealthDate,
       firstContactScreeningProviderDate: body.firstContactScreeningProviderDate,
       lastContactScreeningProviderDate: body.lastContactScreeningProviderDate,
       firstContactCareProviderDate: body.firstContactCareProviderDate,

@@ -1,12 +1,11 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import OutcomeCards from './OutcomeCards';
 import StageBreakdownTable from './StageBreakdownTable';
 import {
   computeSelfCheckJourney,
   computePatientSupportJourney,
-  BUCKET_LABEL,
   BUCKET_BADGE,
   OverallBucket,
   JourneyState,
@@ -18,6 +17,9 @@ interface TelehealthDashboardProps {
   alertsData: string[][];
   onJumpToTab: (tab: 'screening' | 'care' | 'alerts') => void;
   onJumpToRecord?: (tab: 'screening' | 'care' | 'alerts', recordId: string) => void;
+  // v1.7 — clicking an outcome bucket card jumps to the log tab and
+  // filters it to records in that bucket.
+  onJumpToBucket?: (tab: 'screening' | 'care', bucket: OverallBucket) => void;
 }
 
 interface OverdueItem {
@@ -28,10 +30,7 @@ interface OverdueItem {
   ageDays: number | null;
 }
 
-export default function TelehealthDashboard({ screeningData, careData, alertsData, onJumpToTab, onJumpToRecord }: TelehealthDashboardProps) {
-  const [scBucket, setScBucket] = useState<OverallBucket | null>(null);
-  const [psBucket, setPsBucket] = useState<OverallBucket | null>(null);
-
+export default function TelehealthDashboard({ screeningData, careData, alertsData, onJumpToTab, onJumpToRecord, onJumpToBucket }: TelehealthDashboardProps) {
   const {
     screeningJourneys,
     careJourneys,
@@ -114,15 +113,6 @@ export default function TelehealthDashboard({ screeningData, careData, alertsDat
     };
   }, [screeningData, careData, alertsData]);
 
-  // Filtered journey lists when a bucket card is selected.
-  const visibleScreening = useMemo(
-    () => (scBucket ? screeningJourneys.filter(j => j.bucket === scBucket) : screeningJourneys),
-    [scBucket, screeningJourneys]
-  );
-  const visiblePatientSupport = useMemo(
-    () => (psBucket ? careJourneys.filter(j => j.bucket === psBucket) : careJourneys),
-    [psBucket, careJourneys]
-  );
 
   return (
     <div className="space-y-6">
@@ -186,13 +176,12 @@ export default function TelehealthDashboard({ screeningData, careData, alertsDat
         <OutcomeCards
           title="Screening Referral"
           journeys={screeningJourneys}
-          selectedBucket={scBucket}
-          onBucketClick={setScBucket}
+          onBucketClick={b => {
+            if (b && onJumpToBucket) onJumpToBucket('screening', b);
+            else if (b) onJumpToTab('screening');
+          }}
         />
-        <StageBreakdownTable
-          title={scBucket ? `Stages — ${BUCKET_LABEL[scBucket]} (${visibleScreening.length})` : 'Stages — all records'}
-          journeys={visibleScreening}
-        />
+        <StageBreakdownTable title="Stages — all records" journeys={screeningJourneys} />
       </div>
 
       {/* Care Referral */}
@@ -200,13 +189,12 @@ export default function TelehealthDashboard({ screeningData, careData, alertsDat
         <OutcomeCards
           title="Care Referral"
           journeys={careJourneys}
-          selectedBucket={psBucket}
-          onBucketClick={setPsBucket}
+          onBucketClick={b => {
+            if (b && onJumpToBucket) onJumpToBucket('care', b);
+            else if (b) onJumpToTab('care');
+          }}
         />
-        <StageBreakdownTable
-          title={psBucket ? `Stages — ${BUCKET_LABEL[psBucket]} (${visiblePatientSupport.length})` : 'Stages — all records'}
-          journeys={visiblePatientSupport}
-        />
+        <StageBreakdownTable title="Stages — all records" journeys={careJourneys} />
       </div>
 
       {/* 🚨 Overdue queue — patients waiting beyond the 7-day SLA on a stage. */}

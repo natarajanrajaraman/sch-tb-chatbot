@@ -43,16 +43,20 @@ export default function SpeedbackShell({ title, subtitle, activeView, rightActio
     <div className="h-screen overflow-hidden flex flex-col" style={{ backgroundColor: '#FAF7F2' }}>
       {/* Sandbox / Prototype banner */}
       <div className="bg-amber-100 text-amber-900 text-xs px-4 py-1.5 text-center font-medium border-b border-amber-200">
-        ⚠️ Prototype Environment — design mirrors Speedback for SCH preview
+        ⚠️ Prototype Environment
       </div>
 
       {/* Main: sidebar + content */}
       <div className="flex-1 flex min-h-0">
         {/* Sidebar */}
         <aside className="w-16 md:w-20 bg-slate-900 text-white flex flex-col items-center py-4 shrink-0">
-          {/* Brand logo at top */}
-          <a href="/" className="mb-6 block" title="Back to chatbot">
-            <img src="/speedback-logo.svg" alt="Speedback (mock)" className="w-9 h-9" />
+          {/* "Back to chatbot" link (no logo — Speedback branding stripped v1.7) */}
+          <a
+            href="/"
+            className="mb-6 w-10 h-10 flex items-center justify-center rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 text-lg"
+            title="Back to chatbot"
+          >
+            ←
           </a>
           {/* Nav icons */}
           <nav className="flex flex-col gap-2">
@@ -83,13 +87,8 @@ export default function SpeedbackShell({ title, subtitle, activeView, rightActio
 
         {/* Content column */}
         <div className="flex-1 flex flex-col min-w-0 min-h-0">
-          {/* Header bar — brand + search + actions */}
+          {/* Header bar — search + actions (Speedback brand stripped v1.7) */}
           <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center gap-4 shrink-0">
-            <div className="flex items-center gap-2 shrink-0">
-              <img src="/speedback-logo.svg" alt="Speedback" className="w-8 h-8" />
-              <span className="text-lg font-bold text-slate-900">Speedback</span>
-              <span className="text-xs text-slate-400 ml-2 hidden md:inline">(mock UI for SCH preview)</span>
-            </div>
             {search && (
               <div className="flex-1 max-w-md mx-auto">
                 <div className="relative">
