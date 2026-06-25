@@ -180,7 +180,7 @@ export async function saveSession(session: SessionRow): Promise<void> {
     session.transcriptUrl || '',
   ];
 
-  await appendToSheet('Sessions', [row]);
+  await appendToSheet('Self-Check Log', [row]);
 }
 
 export async function saveFeedback(feedbackId: string, conversationId: string, feedbackText: string, platformView: string, snapshot: string = ''): Promise<void> {
@@ -202,7 +202,7 @@ export async function saveReferralLog(
 
 export async function getAllSessions(): Promise<string[][]> {
   try {
-    return await getSheetValues('Sessions', 'A1:AA1000');
+    return await getSheetValues('Self-Check Log', 'A1:AA1000');
   } catch {
     return [];
   }
@@ -300,6 +300,35 @@ export async function clearScreeningReferralLogDataRows(): Promise<void> {
     spreadsheetId: SPREADSHEET_ID,
     range: 'Screening Referral Log!A2:AH10000',
   });
+}
+
+// v1.7.4 — One-shot tab rename. Idempotent: if "Self-Check Log" already
+// exists we return early; if "Sessions" exists we rename it. Used by
+// /api/admin/rename-sessions-tab so the code can ship referring to the
+// new name without breaking the deployed sheet.
+export async function renameSessionsTab(): Promise<{ renamed: boolean; alreadyDone: boolean }> {
+  const sheets = getSheets();
+  const meta = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID });
+  const tabs = meta.data.sheets || [];
+  if (tabs.find(s => s.properties?.title === 'Self-Check Log')) {
+    return { renamed: false, alreadyDone: true };
+  }
+  const sessionsTab = tabs.find(s => s.properties?.title === 'Sessions');
+  if (!sessionsTab || sessionsTab.properties?.sheetId == null) {
+    throw new Error('Neither "Self-Check Log" nor "Sessions" tab was found on the spreadsheet.');
+  }
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId: SPREADSHEET_ID,
+    requestBody: {
+      requests: [{
+        updateSheetProperties: {
+          properties: { sheetId: sessionsTab.properties.sheetId, title: 'Self-Check Log' },
+          fields: 'title',
+        },
+      }],
+    },
+  });
+  return { renamed: true, alreadyDone: false };
 }
 
 // ----- Care Referral Log -----

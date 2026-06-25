@@ -386,7 +386,7 @@ function AdminInner() {
 
   const tabs: { id: TabType; label: string; icon: string }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: '📊' },
-    { id: 'sessions', label: 'Sessions', icon: '💬' },
+    { id: 'sessions', label: 'Self-Check Log', icon: '💬' },
     { id: 'feedback', label: 'Feedback', icon: '📝' },
     { id: 'referral-log', label: 'Screening Referral Log', icon: '🏥' },
     { id: 'care-referral-log', label: 'Care Referral Log', icon: '🤝' },
@@ -460,7 +460,7 @@ function AdminInner() {
                 careReferralLogs={careReferralLogs}
               />
             )}
-            {activeTab === 'sessions' && <DataTable data={sessions} title="Sessions" />}
+            {activeTab === 'sessions' && <DataTable data={sessions} title="Self-Check Log" />}
             {activeTab === 'feedback' && <DataTable data={feedback} title="Feedback" />}
             {activeTab === 'referral-log' && <ScreeningReferralLogTable data={referralLogs} onRefresh={fetchData} editable={true} userRole="admin" />}
             {activeTab === 'care-referral-log' && <DataTable data={careReferralLogs} title="Care Referral Log" />}

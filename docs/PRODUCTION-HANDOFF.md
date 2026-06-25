@@ -509,13 +509,12 @@ These markers exist in the source — search for them on handoff:
 
 ## 14. User guide maintenance
 
-The SCH-facing user guide is a Google Doc on the work shared drive:
+The SCH-facing user guide is **a markdown file in this repo** (v1.7.4 — migrated from .gdoc per Raj's directive: the gdoc-sync flow had ongoing clobber/sync friction with no offsetting benefit for an audience that can read on GitHub).
 
-- **Location:** `I:\Shared drives\Equitech Collective\PROJECTS\SCH - TB Project (FC-SDS Mm)\03_Discovery\SCH TB Chatbot [PROTOTYPE]\User Guide\SCH TB Chatbot Prototype — User Guide`
-- **Doc id:** `14YYjIlCwWrvQc9hlwoqCTwqWQHMtgvH0r24MISSdrvA` (re-created in v1.6 — old ids trashed)
-- **URL:** https://docs.google.com/document/d/14YYjIlCwWrvQc9hlwoqCTwqWQHMtgvH0r24MISSdrvA/edit
+- **Source of truth:** `docs/USER-GUIDE.md`
+- **Reader URL** (linked from the dev panel and shared with SCH): https://github.com/natarajanrajaraman/sch-tb-chatbot/blob/master/docs/USER-GUIDE.md — GitHub renders the markdown nicely.
+- **Old gdoc id** `14YYjIlCwWrvQc9hlwoqCTwqWQHMtgvH0r24MISSdrvA` is now orphaned and may be trashed.
 - **Audience:** SCH Admin, SCH Tele-Health, TB Screening Provider, TB Care Provider — many are non-native English speakers; keep wording short and direct.
-- **Repo source of truth:** `docs/USER-GUIDE.md`. The gdoc is rendered from this file; the file is what we version in git.
 
 ### Terminology — must stay consistent
 
@@ -531,14 +530,11 @@ Use only the user-facing names below. Do **not** use the internal "Product 1 / P
 When you bump `BOT_VERSION` for a release that affects anything a user could notice (new role view, new dashboard, terminology change, behaviour change, surface rename, etc.):
 
 1. **Edit `docs/USER-GUIDE.md`** in this repo — update the version line at the top, add a row to the "Version history" table, and revise any section whose content changed.
-2. **Sync the AUTO block into the gdoc**. Two options:
-   - **Quick (small change):** open the gdoc in the browser and edit it by hand, mirroring the repo file.
-   - **Full regen (after a larger change):** the proven path is `gog docs create --file docs/USER-GUIDE.md --parent <User-Guide-folder-id>` — this creates a fresh gdoc with proper markdown rendering. Then trash the old gdoc and update `USER_GUIDE_GDOC` in `src/components/p3/P3DocLinks.tsx` + the §14 doc-id reference here. (`gog docs find-replace --format markdown` on the existing doc stalls at ~16KB of content — known tooling limitation; build `scripts/sync-user-guide.js` against the Docs API directly if in-place sync becomes important. Once that script exists, drop these create/trash steps.)
-   - **TODO (v1.6+):** build `scripts/sync-user-guide.js` to do in-place sync between markers via the Docs API. This would preserve the doc id across version bumps so the dev-panel link doesn't churn.
-3. **Do not touch anything below the `[END AUTO-MANAGED CONTENT]` marker.** That section ("Your notes") is Raj's hand-edited area and must survive every update.
+2. **Don't touch anything below the `## Your notes` heading.** That section is Raj's hand-edited area and must survive every update.
+3. **Commit + push** as part of the same change — git is the sync mechanism. Conflicts surface as merge conflicts (which is the right tool for "two people edited the same prose").
 
-### What goes in the AUTO section vs the notes section
+### What goes in the auto-managed section vs the notes section
 
-The AUTO block describes how the prototype **currently** behaves — quickstarts, role views, sheet tabs, escalation table, cascade chart shape, known limits, version history. Raj's "Your notes" section is for observations, SCH-side context, open questions, and anything else that should stick around regardless of what the engineering team ships next.
+The auto-managed sections describe how the prototype **currently** behaves — quickstarts, role views, sheet tabs, escalation table, cascade chart shape, known limits, version history. Raj's "Your notes" section is for observations, SCH-side context, open questions, and anything else that should stick around regardless of what the engineering team ships next.
 
-If any factual change in the AUTO section would invalidate something in Raj's notes (e.g. you remove a role), flag it in the commit message — do **not** silently edit the notes.
+If any factual change in the auto-managed section would invalidate something in Raj's notes (e.g. you remove a role), flag it in the commit message — do **not** silently edit the notes.

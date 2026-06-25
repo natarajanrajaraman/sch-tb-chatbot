@@ -175,7 +175,60 @@ Tele-Health team. v1.6 will surface this as a per-patient
 4. **Snooze** — Tele-Health can snooze a case for N days when the
    patient asked to be contacted later. Default snooze length?
 
-### 7. (Add new items here as they come up)
+### 7. Tele-Health contact details — placeholders need real values
+
+The chatbot renders three messages that currently carry placeholders
+for the SCH Tele-Health team's contact channels. We need the real
+values from SCH so the bot stops printing `XXXXXXX` to patients.
+
+**Placeholder 1 — Assisted referral disclaimer** (`msg.referral_disclaimer`,
+shown right before a self-referral patient gets the referral letter):
+
+> Service availability and operating hours may vary by centre. For
+> information or assistance, contact the Sun Clinic Tele-Health team
+> on **09-xxxx** within office hours.
+
+**Placeholder 2 — Assisted referral confirmation** (`msg.assisted_referral_complete`,
+shown after Tele-Health is queued to call):
+
+> 📱 Tele-Health Team Contact:
+> Sun Community Health Tele-Health Team
+> Phone: **[PLACEHOLDER - phone number]**
+> Hours: **Monday - Friday 9:00 - 17:00**
+
+**Placeholder 3 — End-of-conversation contact card** (`msg.contact_info`,
+shown when the user opts to End Conversation):
+
+> 📨 For more questions, you may contact the SCH Tele-Health team —
+> Phone: **09-XXXXXXX**
+> Viber: **09-XXXXXXX**
+> Telegram: **@SCH-TB-XXXX**
+> Facebook: **m.me/sch-tb-XXXX**
+
+**Questions for KZ:**
+
+1. **Confirm team name.** "Sun Community Health Tele-Health Team" vs
+   "Sun Clinic Tele-Health team" — the bot currently uses both.
+   Which is canonical?
+2. **Phone number for SCH Tele-Health** — single number, or do
+   Assisted Referral and end-of-conversation use different lines?
+3. **Operating hours** — Monday–Friday 9:00–17:00 is a guess. Real
+   hours? Timezone?
+4. **Viber, Telegram, Facebook** — confirm the channels SCH wants
+   advertised, and give the actual handles. The current chatbot
+   strings include all four channels; if SCH only wants phone + one
+   messaging channel, we can prune.
+5. **<24h emergency contact** — for `immediate` escalations the
+   prototype tells the patient to "go to the nearest clinic or
+   hospital NOW." Should it also direct them to a specific 24-hour
+   SCH line? If yes, what's the number?
+
+Once these are settled, replace the placeholders in
+`src/data/messages.ts` keys: `referral_disclaimer`,
+`assisted_referral_complete`, `contact_info`. There is no schema
+change required — just the message text.
+
+### 8. (Add new items here as they come up)
 
 ---
 

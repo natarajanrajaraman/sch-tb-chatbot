@@ -6,18 +6,16 @@
 
 const REPO_BASE = 'https://github.com/natarajanrajaraman/sch-tb-chatbot/blob/master';
 
-// SCH-facing user guide lives on the shared drive (raj@equity.tech).
-// Engineers update the source at docs/USER-GUIDE.md and sync into this
-// gdoc on each version bump — see docs/PRODUCTION-HANDOFF.md §14 "User
-// guide maintenance".
-// v1.5: recreated under a new doc id after gog markdown find-replace
-// stalled on 16KB content; the proven path is `gog docs create --file`.
-const USER_GUIDE_GDOC = 'https://docs.google.com/document/d/14YYjIlCwWrvQc9hlwoqCTwqWQHMtgvH0r24MISSdrvA/edit';
+// v1.7.4 — User guide migrated from .gdoc to markdown (per Raj's
+// directive: "for the documents that you have trouble with combining
+// auto-generation and not clobbering hand-edits, just migrate to
+// markdown"). Old gdoc id 14YYjIl…drvA is now orphaned and may be
+// trashed; the canonical source is docs/USER-GUIDE.md on GitHub.
 
 type Link = { label: string; href: string; tag?: string };
 
 const LINKS: Link[] = [
-  { label: 'User Guide (SCH-facing)', href: USER_GUIDE_GDOC, tag: 'GDOC' },
+  { label: 'User Guide (SCH-facing)', href: `${REPO_BASE}/docs/USER-GUIDE.md` },
   { label: 'SRS (engineering spec)', href: `${REPO_BASE}/docs/SRS.md`, tag: 'SPEC' },
   { label: 'README', href: `${REPO_BASE}/README.md` },
   { label: 'User journeys (testing)', href: `${REPO_BASE}/docs/USER-JOURNEYS.md` },

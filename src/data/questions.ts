@@ -203,8 +203,8 @@ export const RISK_FACTOR_QUESTIONS: ScreeningQuestion[] = [
 
 export const RESPONSE_OPTIONS = {
   yes_no: {
-    yes: { en: 'Yes', mm: 'ဟုတ်ကဲ့' },
-    no: { en: 'No', mm: 'မဟုတ်ပါ' },
+    yes: { en: '✅ Yes', mm: '✅ ဟုတ်ကဲ့' },
+    no: { en: '❎ No', mm: '❎ မဟုတ်ပါ' },
   },
   gender: {
     male: { en: 'Male', mm: 'ကျား' },
@@ -215,12 +215,12 @@ export const RESPONSE_OPTIONS = {
     self: { en: 'Self-Referral', mm: 'ကိုယ်တိုင်သွားမည်' },
   },
   consent: {
-    yes: { en: 'Yes, I consent', mm: 'ဟုတ်ကဲ့၊ သဘောတူပါသည်' },
-    no: { en: 'No', mm: 'မဟုတ်ပါ' },
+    yes: { en: '✅ Yes, I consent', mm: '✅ ဟုတ်ကဲ့၊ သဘောတူပါသည်' },
+    no: { en: '❎ No', mm: '❎ မဟုတ်ပါ' },
   },
   start: {
-    yes: { en: 'Yes, start screening', mm: 'ဟုတ်ကဲ့၊ စစ်ဆေးမည်' },
-    no: { en: 'No, not now', mm: 'မဟုတ်ပါ၊ နောက်မှ' },
+    yes: { en: '✅ Yes, start screening', mm: '✅ ဟုတ်ကဲ့၊ စစ်ဆေးမည်' },
+    no: { en: '❎ No, not now', mm: '❎ မဟုတ်ပါ၊ နောက်မှ' },
   },
   end_options: {
     new_screening: { en: 'New Screening', mm: 'ထပ်မံစစ်ဆေးမည်' },
@@ -239,6 +239,6 @@ export const RESPONSE_OPTIONS = {
   screening_action: {
     explain: { en: '❓ What does this mean?', mm: '❓ ဤမေးခွန်းကို ရှင်းပြပါ' },
     back: { en: '⬅️ Go back', mm: '⬅️ အရင်မေးခွန်းသို့' },
-    exit: { en: '✖️ Exit screening', mm: '✖️ စစ်ဆေးခြင်း ရပ်ဆိုင်းမည်' },
+    exit: { en: '🚪 Exit screening', mm: '🚪 စစ်ဆေးခြင်း ရပ်ဆိုင်းမည်' },
   },
 };

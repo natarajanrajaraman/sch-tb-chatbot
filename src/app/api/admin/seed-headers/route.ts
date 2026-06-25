@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 const SPEC = [
-  { sheetName: 'Sessions', headers: SESSIONS_HEADERS },
+  { sheetName: 'Self-Check Log', headers: SESSIONS_HEADERS },
   {
     sheetName: 'Feedback',
     headers: ['feedbackId', 'conversationId', 'timestamp', 'feedbackText', 'platformView', 'snapshot'],
