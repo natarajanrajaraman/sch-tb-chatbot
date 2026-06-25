@@ -18,6 +18,8 @@
 
 | Version | Date       | Highlights                                                                                                                |
 |---------|------------|---------------------------------------------------------------------------------------------------------------------------|
+| 1.4.0   | 2026-06-25 | **SCH-facing User Guide gdoc** authored on the work shared drive (`I:\Shared drives\Equitech Collective\PROJECTS\SCH - TB Project (FC-SDS Mm)\03_Discovery\SCH TB Chatbot [PROTOTYPE]\User Guide`, doc id `1VpZFdgYkqeL7VbHCcNt2P44xog-gAVkMJ3iy8FJKaRw`). Simple-English, role-based quickstarts for SCH Admin / SCH Telehealth / TB Screening Provider / TB Care Provider. Doc structure has a bounded **[BEGIN AUTO-MANAGED CONTENT] / [END AUTO-MANAGED CONTENT]** block so engineers can regenerate the auto block on every version bump while Raj's hand-edits in the "Your notes" section below the END marker survive. Source-of-truth lives at `docs/USER-GUIDE.md` in this repo. Link added to the developer panel under a new `GDOC` tag. Maintenance procedure documented in §14 below. Terminology pinned to **"TB Self-Check Tool"** (P1) and **"TB Patient Support Chatbot"** (P3) — the "Product 1 / Product 3" wording is internal-only and must not appear in user-facing strings. |
+| 1.3.0   | 2026-06-24 | **SCH Admin dashboard split** into two sections — `TB Self-Check` and `TB Patient Support` — each with a recursive `CascadeFunnel` visualisation. Self-check cascade: Total → Presumptive → (Assisted \| Self) → Telehealth contact → Screening provider → Tests resulted → TB-positive. Patient-support cascade: Total P3 → Escalated → Care referrals → Telehealth → Care provider. Cross-sheet joins on `screeningReferralId` (self-check) and `careReferralId` (patient support). "Total Screenings" KPI card renamed to "Total Self-Checks". `GET /api/p3/conversation` added so the admin page can read the AI Conversations tab. `USER-JOURNEYS.md` link added to the developer panel. |
 | 1.0.0   | 2026-06-25 | **Transcripts to Drive**: every P1 + P3 conversation is now saved as a Markdown file (`{conversationId}.md`) into a Drive folder shared with the service account. Path: env var `GOOGLE_DRIVE_TRANSCRIPT_FOLDER_ID`. P1 saves once on terminal state; P3 saves after every turn (idempotent — create or update the same file). `transcriptUrl` columns added to Sessions + P3 Conversations. Both Telehealth log dashboards (Screening + Care) now show a **📄 Transcript** button per row that opens the Markdown file in a new tab (lookup-on-click via `/api/transcript/lookup` so the dashboard's initial render is unchanged). **Find-new-provider cascade** wired into the P3 Self care-referral flow: 3-step State→District→Township picker → `/api/referral-sites` lookup → rendered as a clinic list with addresses + phones. Replaces v0.9.4's Tele-Health-fallback placeholder. **New scope on the Google service account**: `https://www.googleapis.com/auth/drive` added alongside the existing Sheets scope. Bot version 1.0.0. |
 | 0.9.0   | 2026-06-25 | **P3 Phase A + D**: LLM-powered TB-patient-info chatbot wired up. LANDING choice 2 now hands off to a new `P3ChatPanel` instead of the v0.6 stub. **OpenRouter** as the LLM gateway (single key, 5 models in the v0.9 switcher across Frontier / Efficient / Ultra-cheap bands: gpt-5.4, claude-sonnet-4-6, gpt-5.4-mini, qwen-2.5-32b, deepseek-v4-flash). **System prompt** in `docs/p3-system-prompt.md` (Markdown, web-viewable, loaded server-side, hot-swappable per deploy). **Escalation rules** in `docs/p3-escalation-rules.md` — rule-based pre-check on the user's message + LLM-emitted `<escalation level="..."/>` tag, final = max(rule, LLM). On `immediate` or `telehealth`: bot asks for **TB Case ID** (skippable), generates `careReferralId` = `CR-...`, logs to Care Referral Log with no PII beyond the optional TB Case ID + adds to telemetry. **Debug panel**: P3 cost meter (model picker + token totals + estimated $ + escalation summary), Workflow flowchart adapts to P3 mode, and a new **GitHub docs-links block** (README, system prompt, escalation rules, handoff, FB comparison, KZ discussion points). New sheet tab `P3 Conversations` for telemetry. **Care Referral Log** extends to 14 cols with `patientTbCaseId`. **Search-by-name** on both log tables. **Env var required on Vercel**: `OPENROUTER_API_KEY`. |
 | 0.8.0   | 2026-06-25 | **Rename**: Referral Log column A `referralId` → `screeningReferralId` (disambiguates from `careReferralId` on the Care Referral Log). New rows minted with `SR-` prefix (legacy `REF-` rows still work — lookups are exact-string). **Role-view reshape**: SCH Telehealth View is now tabbed (Screening Referral Log + Care Referral Log, both editable). TB Screening Provider View now shows the editable Screening Referral Log (was read-only Care). TB Care Provider View unchanged. **Search by ID** on both log tables — substring match against column A. |
@@ -502,3 +504,38 @@ These markers exist in the source — search for them on handoff:
   (`msg.health_education`). SCH-approved content per Q3 of the May
   pre-catch-up batch (WHO Module 4 §"Tuberculosis care and support")
   should replace it.
+
+## 14. User guide maintenance
+
+The SCH-facing user guide is a Google Doc on the work shared drive:
+
+- **Location:** `I:\Shared drives\Equitech Collective\PROJECTS\SCH - TB Project (FC-SDS Mm)\03_Discovery\SCH TB Chatbot [PROTOTYPE]\User Guide\SCH TB Chatbot Prototype — User Guide`
+- **Doc id:** `1VpZFdgYkqeL7VbHCcNt2P44xog-gAVkMJ3iy8FJKaRw`
+- **URL:** https://docs.google.com/document/d/1VpZFdgYkqeL7VbHCcNt2P44xog-gAVkMJ3iy8FJKaRw/edit
+- **Audience:** SCH Admin, SCH Tele-Health, TB Screening Provider, TB Care Provider — many are non-native English speakers; keep wording short and direct.
+- **Repo source of truth:** `docs/USER-GUIDE.md`. The gdoc is rendered from this file; the file is what we version in git.
+
+### Terminology — must stay consistent
+
+Use only the user-facing names below. Do **not** use the internal "Product 1 / P1 / Product 3 / P3" wording anywhere in the guide or in user-facing UI strings.
+
+| User-facing name | Internal name | Surface |
+|---|---|---|
+| TB Self-Check Tool | P1 | Landing choice 1 — fixed-flow screening |
+| TB Patient Support Chatbot | P3 | Landing choice 2 — LLM open conversation |
+
+### Update procedure on every version bump
+
+When you bump `BOT_VERSION` for a release that affects anything a user could notice (new role view, new dashboard, terminology change, behaviour change, surface rename, etc.):
+
+1. **Edit `docs/USER-GUIDE.md`** in this repo — update the version line at the top, add a row to the "Version history" table, and revise any section whose content changed.
+2. **Sync the AUTO block into the gdoc**. Two options:
+   - **Quick (small change):** open the gdoc in the browser and edit it by hand, mirroring the repo file.
+   - **Full regen (after a larger change):** use `gog docs` to overwrite the block between the two `[BEGIN AUTO-MANAGED CONTENT]` / `[END AUTO-MANAGED CONTENT]` anchor lines. The first time we need this, build a small helper at `scripts/sync-user-guide.js` and add the run command here.
+3. **Do not touch anything below the `[END AUTO-MANAGED CONTENT]` marker.** That section ("Your notes") is Raj's hand-edited area and must survive every update.
+
+### What goes in the AUTO section vs the notes section
+
+The AUTO block describes how the prototype **currently** behaves — quickstarts, role views, sheet tabs, escalation table, cascade chart shape, known limits, version history. Raj's "Your notes" section is for observations, SCH-side context, open questions, and anything else that should stick around regardless of what the engineering team ships next.
+
+If any factual change in the AUTO section would invalidate something in Raj's notes (e.g. you remove a role), flag it in the commit message — do **not** silently edit the notes.
