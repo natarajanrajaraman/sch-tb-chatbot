@@ -1,0 +1,116 @@
+// Markdown serializer for conversation transcripts.
+//
+// One Markdown file per conversationId. Each file is human-readable
+// (clinicians + Wa Thone + reviewers open it directly in Drive's
+// preview) and also greppable for offline analysis.
+
+export type TranscriptMode = 'P1' | 'P3';
+
+export interface TranscriptMessage {
+  role: 'bot' | 'user' | 'system';
+  textMm: string;
+  textEn: string;
+  ts: number;
+  escalation?: string;            // P3 only
+  careReferralId?: string;        // P3 only
+}
+
+export interface TranscriptMeta {
+  conversationId: string;
+  mode: TranscriptMode;
+  startedAt: string;
+  lastMessageAt: string;
+  platformView: string;
+  botVersion: string;
+  // P1 only
+  classification?: string;
+  referralType?: string;
+  screeningId?: string;
+  ageGroup?: string;
+  // P3 only
+  model?: string;
+  totalPromptTokens?: number;
+  totalCompletionTokens?: number;
+  estCostUsd?: number;
+  escalationsCount?: number;
+  careReferralIds?: string[];
+}
+
+function fmtTime(ts: number): string {
+  try {
+    return new Date(ts).toISOString();
+  } catch {
+    return String(ts);
+  }
+}
+
+function blockquote(s: string): string {
+  if (!s) return '> _(empty)_';
+  return s.split('\n').map(line => `> ${line}`).join('\n');
+}
+
+export function renderTranscriptMarkdown(meta: TranscriptMeta, messages: TranscriptMessage[]): string {
+  const headerLines: string[] = [];
+  headerLines.push(`# Conversation ${meta.conversationId}`);
+  headerLines.push('');
+  headerLines.push(`**Mode:** ${meta.mode === 'P3' ? 'P3 (Patient info chatbot — LLM)' : 'P1 (Self-check — rule-based)'}`);
+  headerLines.push(`**Started:** ${meta.startedAt}`);
+  headerLines.push(`**Last message:** ${meta.lastMessageAt}`);
+  headerLines.push(`**Platform:** ${meta.platformView}`);
+  headerLines.push(`**Bot version:** ${meta.botVersion}`);
+
+  if (meta.mode === 'P1') {
+    if (meta.ageGroup) headerLines.push(`**Age group:** ${meta.ageGroup}`);
+    if (meta.classification) headerLines.push(`**Classification:** ${meta.classification}`);
+    if (meta.referralType) headerLines.push(`**Referral type:** ${meta.referralType}`);
+    if (meta.screeningId) headerLines.push(`**Screening ID:** ${meta.screeningId}`);
+  } else {
+    if (meta.model) headerLines.push(`**Model:** ${meta.model}`);
+    if (meta.totalPromptTokens != null || meta.totalCompletionTokens != null) {
+      headerLines.push(`**Tokens (in / out):** ${meta.totalPromptTokens ?? 0} / ${meta.totalCompletionTokens ?? 0}`);
+    }
+    if (meta.estCostUsd != null) {
+      headerLines.push(`**Estimated cost:** $${meta.estCostUsd.toFixed(5)} USD`);
+    }
+    if (meta.escalationsCount != null) {
+      headerLines.push(`**Escalations:** ${meta.escalationsCount}`);
+    }
+    if (meta.careReferralIds && meta.careReferralIds.length > 0) {
+      headerLines.push(`**Care referral IDs:** ${meta.careReferralIds.join(', ')}`);
+    }
+  }
+
+  headerLines.push('');
+  headerLines.push('---');
+  headerLines.push('');
+  headerLines.push('## Transcript');
+  headerLines.push('');
+
+  const body: string[] = [];
+  for (const m of messages) {
+    const time = fmtTime(m.ts);
+    const tags: string[] = [];
+    if (m.escalation && m.escalation !== 'none') tags.push(`escalation: ${m.escalation}`);
+    if (m.careReferralId) tags.push(`careReferralId: ${m.careReferralId}`);
+    const tagStr = tags.length > 0 ? ` _[${tags.join(' · ')}]_` : '';
+
+    const speaker = m.role === 'bot' ? '🤖 Bot'
+      : m.role === 'user' ? '👤 User'
+      : '⚙️ System';
+
+    body.push(`### ${speaker} — ${time}${tagStr}`);
+    body.push('');
+    body.push(blockquote(m.textMm));
+    if (m.textEn && m.textEn !== m.textMm) {
+      body.push('');
+      body.push('**English:**');
+      body.push('');
+      body.push(blockquote(m.textEn));
+    }
+    body.push('');
+    body.push('---');
+    body.push('');
+  }
+
+  return [...headerLines, ...body].join('\n');
+}

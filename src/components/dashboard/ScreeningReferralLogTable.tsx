@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { downloadCSV } from './DataTable';
+import TranscriptLink from './TranscriptLink';
 
 interface FieldConfig {
   key: string;
@@ -202,6 +203,7 @@ export default function ScreeningReferralLogTable({
           <thead className="sticky top-0 z-10 bg-gray-50 shadow-sm">
             <tr className="border-b">
               <th className="px-3 py-2.5 text-left font-semibold text-gray-600 whitespace-nowrap">SLA</th>
+              <th className="px-3 py-2.5 text-left font-semibold text-gray-600 whitespace-nowrap">Transcript</th>
               {headers.map((h, i) => (
                 <th key={i} className="px-3 py-2.5 text-left font-semibold text-gray-600 whitespace-nowrap">{h}</th>
               ))}
@@ -264,13 +266,17 @@ function ScreeningReferralRow({
         <td className="px-3 py-2 whitespace-nowrap">
           <span className={`px-2 py-0.5 rounded text-[10px] ${slaBadge}`}>{slaLabel}</span>
         </td>
+        <td className="px-3 py-2 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+          {/* Column B = conversationId in REFERRAL_LOG_HEADERS */}
+          <TranscriptLink conversationId={row[1] || ''} />
+        </td>
         {headers.map((_, j) => (
           <td key={j} className="px-3 py-2 text-gray-700 whitespace-nowrap max-w-[200px] truncate" title={row[j] || ''}>{row[j] || ''}</td>
         ))}
       </tr>
       {isExpanded && (
         <tr>
-          <td colSpan={headers.length + 1} className="bg-blue-50/50 px-6 py-4">
+          <td colSpan={headers.length + 2} className="bg-blue-50/50 px-6 py-4">
             <div className="text-sm font-semibold text-gray-700 mb-3">Follow-up & Outcome — {row[0]}</div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {FOLLOW_UP_FIELDS.map(field => (

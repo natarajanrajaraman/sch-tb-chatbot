@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { downloadCSV } from './DataTable';
+import TranscriptLink from './TranscriptLink';
 
 const EDITABLE_FIELDS = [
   { key: 'careProviderName', label: 'Care Provider', col: 6 },
@@ -119,6 +120,7 @@ export default function CareReferralLogTable({
         <table className="w-full text-xs">
           <thead className="sticky top-0 z-10 bg-gray-50 shadow-sm">
             <tr className="border-b">
+              <th className="px-3 py-2.5 text-left font-semibold text-gray-600 whitespace-nowrap">Transcript</th>
               {headers.map((h, i) => (
                 <th key={i} className="px-3 py-2.5 text-left font-semibold text-gray-600 whitespace-nowrap">{h}</th>
               ))}
@@ -132,13 +134,17 @@ export default function CareReferralLogTable({
                   onClick={() => handleExpand(i)}
                   className={`border-b transition-colors ${editable ? 'cursor-pointer' : ''} ${expandedRow === i ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
                 >
+                  <td className="px-3 py-2 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                    {/* Column B = conversationId in CARE_REFERRAL_LOG_HEADERS */}
+                    <TranscriptLink conversationId={row[1] || ''} />
+                  </td>
                   {headers.map((_, j) => (
                     <td key={j} className="px-3 py-2 text-gray-700 whitespace-nowrap max-w-[200px] truncate" title={row[j] || ''}>{row[j] || ''}</td>
                   ))}
                 </tr>
                 {expandedRow === i && (
                   <tr key={`expand-${i}`}>
-                    <td colSpan={headers.length} className="bg-blue-50/50 px-6 py-4">
+                    <td colSpan={headers.length + 1} className="bg-blue-50/50 px-6 py-4">
                       <div className="text-sm font-semibold text-gray-700 mb-3">Edit Care Referral — {row[0]}</div>
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                         {EDITABLE_FIELDS.map(field => (

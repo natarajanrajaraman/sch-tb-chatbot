@@ -53,29 +53,68 @@ export default function ChatWindow({
   // only fired the save inside specific branches of handleSendMessage, which
   // left self-referral (special-cased early-return) and exit (sets status to
   // 'abandoned') silently un-saved. This effect catches all of them.
+  //
+  // v1.0.0 — also writes the transcript to Drive (Markdown) and includes the
+  // resulting webViewLink on the Sessions row so dashboards can link to it.
   useEffect(() => {
     if (session.status !== 'completed' && session.status !== 'abandoned') return;
     const key = `${session.conversationId}:${session.status}`;
     if (savedKeysRef.current.has(key)) return;
     savedKeysRef.current.add(key);
 
-    fetch('/api/session', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(session),
-    })
-      .then(r => r.json())
-      .then(r => {
-        if (!r?.success) {
+    const finalize = async () => {
+      let transcriptUrl = '';
+      try {
+        const tres = await fetch('/api/transcript/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            meta: {
+              conversationId: session.conversationId,
+              mode: 'P1',
+              startedAt: session.startedAt,
+              lastMessageAt: new Date().toISOString(),
+              platformView: session.platformView,
+              botVersion: session.botVersion,
+              classification: session.classification,
+              referralType: session.referralType,
+              screeningId: session.screeningId,
+              ageGroup: session.ageGroup,
+            },
+            messages: messages.map(m => ({
+              role: m.sender,
+              textMm: m.textMm,
+              textEn: m.textEn,
+              ts: m.timestamp,
+            })),
+          }),
+        });
+        const tdata = await tres.json();
+        if (tdata?.success) transcriptUrl = tdata.webViewLink || '';
+        else console.error('Transcript save failed', tdata);
+      } catch (e) {
+        console.error('Transcript save network error', e);
+      }
+
+      try {
+        const sres = await fetch('/api/session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...session, transcriptUrl }),
+        });
+        const sdata = await sres.json();
+        if (!sdata?.success) {
           savedKeysRef.current.delete(key);
-          setSaveError(r?.error ? `Session save failed: ${String(r.error).slice(0, 80)}` : 'Session save failed.');
+          setSaveError(sdata?.error ? `Session save failed: ${String(sdata.error).slice(0, 80)}` : 'Session save failed.');
         }
-      })
-      .catch(e => {
+      } catch (e) {
         savedKeysRef.current.delete(key);
         setSaveError(`Network error saving session: ${String(e).slice(0, 80)}`);
-      });
-  }, [session]);
+      }
+    };
+
+    finalize();
+  }, [session, messages]);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });

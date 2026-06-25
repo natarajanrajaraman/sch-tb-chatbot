@@ -2,13 +2,18 @@ import { google } from 'googleapis';
 
 const SPREADSHEET_ID = process.env.GOOGLE_SHEET_ID || '1WNOvqyienkQNjF5ECUIPq5w30qaAVDQe0cuJrBv2P6w';
 
-function getAuth() {
+// v1.0.0 — also includes Drive scope for transcript writes. The service
+// account only sees Drive folders explicitly shared with it.
+export function getAuth() {
   const keyJson = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
   if (!keyJson) throw new Error('GOOGLE_SERVICE_ACCOUNT_KEY env var is not set');
   const credentials = JSON.parse(keyJson);
   return new google.auth.GoogleAuth({
     credentials,
-    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+    scopes: [
+      'https://www.googleapis.com/auth/spreadsheets',
+      'https://www.googleapis.com/auth/drive',
+    ],
   });
 }
 
@@ -108,6 +113,7 @@ export interface SessionRow {
   under15Excluded: string;
   screeningId: string;
   botVersion: string;
+  transcriptUrl?: string;        // v1.0.0
 }
 
 export const SESSIONS_HEADERS = [
@@ -129,6 +135,8 @@ export const SESSIONS_HEADERS = [
   'clientPhone', 'referralSitesShown',
   // Status + meta
   'status', 'under15Excluded', 'screeningId', 'botVersion',
+  // v1.0.0 — Drive web view URL for the conversation transcript
+  'transcriptUrl',
 ];
 
 export async function saveSession(session: SessionRow): Promise<void> {
@@ -169,6 +177,7 @@ export async function saveSession(session: SessionRow): Promise<void> {
     session.under15Excluded,
     session.screeningId || '',
     session.botVersion || '',
+    session.transcriptUrl || '',
   ];
 
   await appendToSheet('Sessions', [row]);
@@ -346,6 +355,8 @@ export const P3_CONVERSATIONS_HEADERS = [
   'careReferralIds',
   'platformView',
   'botVersion',
+  // v1.0.0 — Drive web view URL for the conversation transcript
+  'transcriptUrl',
 ];
 
 export interface P3ConversationRow {
@@ -362,6 +373,7 @@ export interface P3ConversationRow {
   careReferralIds: string;
   platformView: string;
   botVersion: string;
+  transcriptUrl?: string;        // v1.0.0
 }
 
 export async function upsertP3Conversation(row: P3ConversationRow): Promise<void> {

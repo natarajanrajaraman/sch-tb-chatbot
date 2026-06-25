@@ -35,6 +35,7 @@ export async function POST(request: NextRequest) {
       under15Excluded: body.under15Excluded ? 'Yes' : 'No',
       screeningId: body.screeningId || '',
       botVersion: body.botVersion || '',
+      transcriptUrl: body.transcriptUrl || '',
     });
 
     // If there's a referral, also log it

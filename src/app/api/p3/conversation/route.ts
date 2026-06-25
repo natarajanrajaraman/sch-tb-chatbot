@@ -27,6 +27,7 @@ export async function POST(request: NextRequest) {
       careReferralIds: body.careReferralIds || '',
       platformView: body.platformView || '',
       botVersion: body.botVersion || '',
+      transcriptUrl: body.transcriptUrl || '',
     });
     return NextResponse.json({ success: true });
   } catch (err) {

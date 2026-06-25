@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { PlatformTheme } from '@/data/platformThemes';
 import { BOT_VERSION, generateId } from '@/lib/chatEngine';
 import { DEFAULT_MODEL_ID } from '@/lib/p3/models';
+import FindProviderFlow from './FindProviderFlow';
 
 export type EscalationLevel = 'none' | 'nonurgent' | 'telehealth' | 'immediate';
 
@@ -48,9 +49,14 @@ export default function P3ChatPanel({ theme, modelId, platformView, systemPrompt
     | { step: 'choose-mode'; careReferralId: string; level: EscalationLevel }
     | { step: 'collect-info'; careReferralId: string; mode: 'assisted' | 'self'; level: EscalationLevel };
   const [pendingEscalationPrompt, setPendingEscalationPrompt] = useState<ReferralFlow | null>(null);
+  const [findProviderForReferralId, setFindProviderForReferralId] = useState<string | null>(null);
   const [isTyping, setIsTyping] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Cache the transcript URL once Drive returns it on the first save; we
+  // re-send it with subsequent telemetry upserts so the row keeps it.
+  const transcriptUrlRef = useRef<string>('');
 
   const [totals, setTotals] = useState<P3UsageSnapshot>({
     modelId,
@@ -70,6 +76,7 @@ export default function P3ChatPanel({ theme, modelId, platformView, systemPrompt
     setPendingEscalationPrompt(null);
     setError(null);
     setP3ConversationId(`P3-${generateId()}`);
+    transcriptUrlRef.current = '';
     setTotals({
       modelId,
       totalPromptTokens: 0,
@@ -152,7 +159,11 @@ export default function P3ChatPanel({ theme, modelId, platformView, systemPrompt
       };
       setMessages(prev => [...prev, replyMsg]);
 
-      // Update running totals
+      // Snapshot the full message list including the brand-new reply so the
+      // transcript save below doesn't race the state setter.
+      const fullMessages = [...messages, userMsg, replyMsg];
+
+      // Update running totals + write transcript + upsert telemetry
       setTotals(prev => {
         const next: P3UsageSnapshot = {
           modelId,
@@ -165,26 +176,74 @@ export default function P3ChatPanel({ theme, modelId, platformView, systemPrompt
             ? [...prev.careReferralIds, data.escalation.careReferralId]
             : prev.careReferralIds,
         };
-        // Fire-and-forget telemetry upsert
-        fetch('/api/p3/conversation', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            p3ConversationId,
-            startedAt: messages[0]?.ts ? new Date(messages[0].ts).toISOString() : new Date().toISOString(),
-            lastMessageAt: new Date().toISOString(),
-            model: modelId,
-            userMessageCount: historyPayload.filter(h => h.role === 'user').length + 1,
-            totalPromptTokens: next.totalPromptTokens,
-            totalCompletionTokens: next.totalCompletionTokens,
-            estCostUsd: next.estCostUsd,
-            lastEscalationLevel: next.lastEscalationLevel,
-            escalationsCount: next.escalationsCount,
-            careReferralIds: next.careReferralIds.join(', '),
-            platformView,
-            botVersion: BOT_VERSION,
-          }),
-        }).catch(e => console.error('P3 telemetry upsert failed', e));
+
+        // Write the Markdown transcript to Drive — then upsert the
+        // telemetry row including the resulting webViewLink. Fire and
+        // forget; failures get logged but don't block the chat.
+        (async () => {
+          let transcriptUrl = transcriptUrlRef.current;
+          try {
+            const tres = await fetch('/api/transcript/save', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                meta: {
+                  conversationId: p3ConversationId,
+                  mode: 'P3',
+                  startedAt: fullMessages[0]?.ts ? new Date(fullMessages[0].ts).toISOString() : new Date().toISOString(),
+                  lastMessageAt: new Date().toISOString(),
+                  platformView,
+                  botVersion: BOT_VERSION,
+                  model: modelId,
+                  totalPromptTokens: next.totalPromptTokens,
+                  totalCompletionTokens: next.totalCompletionTokens,
+                  estCostUsd: next.estCostUsd,
+                  escalationsCount: next.escalationsCount,
+                  careReferralIds: next.careReferralIds,
+                },
+                messages: fullMessages.map(m => ({
+                  role: m.role === 'user' ? 'user' : 'bot',
+                  textMm: m.textMm,
+                  textEn: m.textEn,
+                  ts: m.ts,
+                  escalation: m.escalation,
+                  careReferralId: m.careReferralId,
+                })),
+              }),
+            });
+            const tdata = await tres.json();
+            if (tdata?.success && tdata.webViewLink) {
+              transcriptUrl = tdata.webViewLink;
+              transcriptUrlRef.current = tdata.webViewLink;
+            } else if (!tdata?.success) {
+              console.error('Transcript save returned error', tdata);
+            }
+          } catch (te) {
+            console.error('Transcript save failed', te);
+          }
+
+          fetch('/api/p3/conversation', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              p3ConversationId,
+              startedAt: fullMessages[0]?.ts ? new Date(fullMessages[0].ts).toISOString() : new Date().toISOString(),
+              lastMessageAt: new Date().toISOString(),
+              model: modelId,
+              userMessageCount: historyPayload.filter(h => h.role === 'user').length + 1,
+              totalPromptTokens: next.totalPromptTokens,
+              totalCompletionTokens: next.totalCompletionTokens,
+              estCostUsd: next.estCostUsd,
+              lastEscalationLevel: next.lastEscalationLevel,
+              escalationsCount: next.escalationsCount,
+              careReferralIds: next.careReferralIds.join(', '),
+              platformView,
+              botVersion: BOT_VERSION,
+              transcriptUrl,
+            }),
+          }).catch(e => console.error('P3 telemetry upsert failed', e));
+        })();
+
         return next;
       });
 
@@ -398,6 +457,60 @@ export default function P3ChatPanel({ theme, modelId, platformView, systemPrompt
             careReferralId={pendingEscalationPrompt.careReferralId}
             mode={pendingEscalationPrompt.mode}
             onSubmit={handleEscalationSubmit}
+            onFindNewProvider={() => {
+              setFindProviderForReferralId(pendingEscalationPrompt.careReferralId);
+              setPendingEscalationPrompt(null);
+            }}
+          />
+        )}
+
+        {/* Find-provider cascade — opens when Self-mode user taps "Find new provider" */}
+        {findProviderForReferralId && (
+          <FindProviderFlow
+            theme={theme}
+            onCancel={() => setFindProviderForReferralId(null)}
+            onComplete={(res) => {
+              const careReferralId = findProviderForReferralId;
+              setFindProviderForReferralId(null);
+              // Persist the chosen location + first matching provider on the row.
+              const providersSummary = res.providers.length === 0
+                ? 'No providers in directory for this township'
+                : res.providers.slice(0, 3).map(p => `${p.facility_name} (${p.address})`).join(' · ');
+              fetch('/api/care-referral-log', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  careReferralId,
+                  careProviderTownship: `${res.stateRegionEn} › ${res.districtEn} › ${res.townshipEn}`,
+                  notes: `referralMode: self · find-new-provider: ${providersSummary}`,
+                }),
+              }).catch(e => console.error('Care referral PATCH failed', e));
+
+              // Show the result in chat
+              if (res.providers.length === 0) {
+                setMessages(prev => [...prev, {
+                  id: generateId(),
+                  role: 'assistant',
+                  textMm: `${res.stateRegionEn} › ${res.districtEn} › ${res.townshipEn} တွင် Sun GP ဆေးခန်း မရှိပါ။\n\nကျေးဇူးပြု၍ နီးစပ်ရာ မြို့နယ်ဆေးရုံ သို့ တီဘီဌာနသို့ သွားရောက်ပါ။ "နေ" Tele-Health အဖွဲ့သည် အသေးစိတ် လမ်းညွှန်ပေးနိုင်ပါသည် —\nဖုန်း: 09-XXXXXXX\nViber: 09-XXXXXXX\nTelegram: @SCH-TB-XXXX\nFacebook: m.me/sch-tb-XXXX`,
+                  textEn: `No Sun GP clinic found in ${res.stateRegionEn} › ${res.districtEn} › ${res.townshipEn}.\n\nPlease go to your nearest township hospital or TB department. The Sun Tele-Health team can help —\nPhone: 09-XXXXXXX\nViber: 09-XXXXXXX\nTelegram: @SCH-TB-XXXX\nFacebook: m.me/sch-tb-XXXX`,
+                  ts: Date.now(),
+                }]);
+                return;
+              }
+              const listMm = res.providers.slice(0, 5).map((p, i) =>
+                `${i + 1}. ${p.facility_name_mm || p.facility_name}\n   📍 ${p.address}\n   📞 ${p.phone}\n   🏥 ${p.services}\n   🕐 ${p.operating_hours}`
+              ).join('\n\n');
+              const listEn = res.providers.slice(0, 5).map((p, i) =>
+                `${i + 1}. ${p.facility_name}\n   📍 ${p.address}\n   📞 ${p.phone}\n   🏥 ${p.services}\n   🕐 ${p.operating_hours}`
+              ).join('\n\n');
+              setMessages(prev => [...prev, {
+                id: generateId(),
+                role: 'assistant',
+                textMm: `${res.stateRegionEn} › ${res.districtEn} › ${res.townshipEn} အနီးရှိ TB Care Provider များ —\n\n${listMm}\n\nကျေးဇူးပြု၍ မိမိ နီးစပ်သော ဆေးခန်းတစ်ခုခုသို့ သွားရောက်ပါ။`,
+                textEn: `TB Care Providers near ${res.stateRegionEn} › ${res.districtEn} › ${res.townshipEn} —\n\n${listEn}\n\nPlease go to the clinic nearest to you.`,
+                ts: Date.now(),
+              }]);
+            }}
           />
         )}
 
@@ -492,12 +605,13 @@ function ReferralModeChoicePrompt({
 }
 
 function EscalationContactPrompt({
-  theme, careReferralId, mode, onSubmit,
+  theme, careReferralId, mode, onSubmit, onFindNewProvider,
 }: {
   theme: PlatformTheme;
   careReferralId: string;
   mode: 'assisted' | 'self';
   onSubmit: (caseId: string, contact: string, currentProviderId: string) => void;
+  onFindNewProvider?: () => void;
 }) {
   const [caseId, setCaseId] = useState('');
   const [contact, setContact] = useState('');
@@ -570,9 +684,17 @@ function EscalationContactPrompt({
               />
               <div className="mt-1 text-[10px] opacity-70">
                 Don&apos;t know your provider or want a new one?
-                Find-new-provider lookup is coming soon — for now,
-                tap Submit and SCH Tele-Health will help you find one.
               </div>
+              {onFindNewProvider && (
+                <button
+                  type="button"
+                  onClick={onFindNewProvider}
+                  className="mt-1 text-[11px] underline text-blue-700 hover:text-blue-900"
+                  title="Open the location cascade to find a TB care provider near you."
+                >
+                  📍 Find a new TB care provider near me
+                </button>
+              )}
             </div>
           )}
 
