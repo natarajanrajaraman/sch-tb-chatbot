@@ -549,10 +549,10 @@ function DashboardView({
           </div>
         )}
 
-        {/* v1.6 — Self-Check Outcome (Tele-Health rollup) + per-stage breakdown */}
+        {/* v1.6 — Screening Referral outcome rollup + per-stage breakdown */}
         <div className="space-y-3 mb-6">
           <OutcomeCards
-            title="Self-Check Outcome — Tele-Health's rollup per Screening Referral"
+            title="Screening Referral"
             journeys={screeningJourneys}
           />
           <StageBreakdownTable title="Per-stage breakdown" journeys={screeningJourneys} />
@@ -625,10 +625,10 @@ function DashboardView({
           </div>
         )}
 
-        {/* v1.6 — Patient Support Outcome (Tele-Health rollup) + per-stage breakdown */}
+        {/* v1.6 — Care Referral outcome rollup + per-stage breakdown */}
         <div className="space-y-3">
           <OutcomeCards
-            title="Patient Support Outcome — Tele-Health's rollup per Care Referral"
+            title="Care Referral"
             journeys={careJourneys}
           />
           <StageBreakdownTable title="Per-stage breakdown" journeys={careJourneys} />

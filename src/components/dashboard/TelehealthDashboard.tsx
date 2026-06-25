@@ -46,20 +46,23 @@ export default function TelehealthDashboard({ screeningData, careData, alertsDat
     const aRows = (alertsData[0] ? alertsData.slice(1) : alertsData) || [];
 
     // v1.6.1 — drop empty rows (no recordId) before classification so they
-    // don't pollute the outcome counts.
-    const screeningJourneys: JourneyState[] = sRows
-      .map(r => computeSelfCheckJourney(r, sHeaders))
-      .filter(j => !!j.recordId);
-    const careJourneys: JourneyState[] = cRows
-      .map(r => computePatientSupportJourney(r, cHeaders))
-      .filter(j => !!j.recordId);
+    // don't pollute the outcome counts. Pair row+journey so iteration on
+    // the filtered list still gives access to clientName etc.
+    const screeningPairs = sRows
+      .map(r => ({ row: r, j: computeSelfCheckJourney(r, sHeaders) }))
+      .filter(p => !!p.j.recordId);
+    const carePairs = cRows
+      .map(r => ({ row: r, j: computePatientSupportJourney(r, cHeaders) }))
+      .filter(p => !!p.j.recordId);
+
+    const screeningJourneys: JourneyState[] = screeningPairs.map(p => p.j);
+    const careJourneys: JourneyState[] = carePairs.map(p => p.j);
 
     // Overdue task queue — union across both pathways. The label points
     // to the most-overdue stage on each record so Tele-Health knows what
     // to chase.
     const overdueItems: OverdueItem[] = [];
-    sRows.forEach((r, i) => {
-      const j = screeningJourneys[i];
+    screeningPairs.forEach(({ row: r, j }) => {
       if (j.bucket !== 'overdue') return;
       const stage = j.stages.find(s => s.status === 'overdue');
       if (!stage) return;
@@ -71,8 +74,7 @@ export default function TelehealthDashboard({ screeningData, careData, alertsDat
         ageDays: stage.ageDays,
       });
     });
-    cRows.forEach((r, i) => {
-      const j = careJourneys[i];
+    carePairs.forEach(({ row: r, j }) => {
       if (j.bucket !== 'overdue') return;
       const stage = j.stages.find(s => s.status === 'overdue');
       if (!stage) return;
