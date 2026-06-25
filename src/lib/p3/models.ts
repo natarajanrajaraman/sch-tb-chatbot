@@ -11,6 +11,7 @@ export interface ModelEntry {
   pricePerMTokenInputUsd: number;
   pricePerMTokenOutputUsd: number;
   notes: string;
+  disabled?: boolean;          // shown greyed out in the picker but not selectable
 }
 
 export const P3_MODELS: ModelEntry[] = [
@@ -21,6 +22,7 @@ export const P3_MODELS: ModelEntry[] = [
     pricePerMTokenInputUsd: 2.50,
     pricePerMTokenOutputUsd: 10.00,
     notes: 'OpenAI flagship. Best-in-class reasoning + nuance. Most expensive.',
+    disabled: true,
   },
   {
     id: 'anthropic/claude-sonnet-4-6',
@@ -29,6 +31,7 @@ export const P3_MODELS: ModelEntry[] = [
     pricePerMTokenInputUsd: 3.00,
     pricePerMTokenOutputUsd: 15.00,
     notes: 'Anthropic mid-frontier. Strong on long context + safety-shaped responses.',
+    disabled: true,
   },
   {
     id: 'openai/gpt-5.4-mini',

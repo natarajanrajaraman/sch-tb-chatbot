@@ -35,8 +35,8 @@ export default function P3CostMeter({ modelId, onModelChange, usage, onReset, vi
           className="w-full bg-gray-800 text-gray-200 text-[10px] px-2 py-1 rounded border border-gray-700"
         >
           {P3_MODELS.map(m => (
-            <option key={m.id} value={m.id}>
-              {m.label} — {m.band} (in ${m.pricePerMTokenInputUsd}/M, out ${m.pricePerMTokenOutputUsd}/M)
+            <option key={m.id} value={m.id} disabled={m.disabled}>
+              {m.disabled ? '🔒 ' : ''}{m.label} — {m.band} (in ${m.pricePerMTokenInputUsd}/M, out ${m.pricePerMTokenOutputUsd}/M){m.disabled ? ' — disabled' : ''}
             </option>
           ))}
         </select>
