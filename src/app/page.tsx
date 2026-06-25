@@ -271,36 +271,41 @@ export default function Home() {
                 )}
               </div>
 
-              {/* Dashboards — expanded by default */}
+              {/* Dashboards — expanded by default. v1.7.2 — emoji icons
+                  per role match the sidebar nav in SpeedbackShell. */}
               <CollapsibleSection title="Dashboards (mock auth)" defaultOpen={true}>
                 <div className="px-3 py-2 space-y-1 bg-gray-800/40">
                   <a
                     href="/admin"
                     title="Full read+edit across Sessions, Feedback, Screening Referral Log, Care Referral Log. Link to the underlying Google Sheet."
-                    className="block w-full px-2 py-1 bg-gray-700/50 text-gray-200 text-[10px] font-medium rounded hover:bg-gray-700 text-center"
+                    className="flex items-center gap-2 w-full px-2 py-1 bg-gray-700/50 text-gray-200 text-[10px] font-medium rounded hover:bg-gray-700"
                   >
-                    SCH Admin View
+                    <span className="text-base leading-none">🤓</span>
+                    <span>SCH Admin View</span>
                   </a>
                   <a
                     href="/telehealth"
                     title="SCH Tele-Health team's dashboard. Tabbed: Screening Referral Log + Care Referral Log, both editable."
-                    className="block w-full px-2 py-1 bg-gray-700/50 text-gray-200 text-[10px] font-medium rounded hover:bg-gray-700 text-center"
+                    className="flex items-center gap-2 w-full px-2 py-1 bg-gray-700/50 text-gray-200 text-[10px] font-medium rounded hover:bg-gray-700"
                   >
-                    SCH Tele-Health View
+                    <span className="text-base leading-none">🎧</span>
+                    <span>SCH Tele-Health View</span>
                   </a>
                   <a
                     href="/screening-provider"
                     title="TB screening providers (CXR, sputum testing). Read+edit Screening Referral Log."
-                    className="block w-full px-2 py-1 bg-gray-700/50 text-gray-200 text-[10px] font-medium rounded hover:bg-gray-700 text-center"
+                    className="flex items-center gap-2 w-full px-2 py-1 bg-gray-700/50 text-gray-200 text-[10px] font-medium rounded hover:bg-gray-700"
                   >
-                    TB Screening Provider View
+                    <span className="text-base leading-none">🩻</span>
+                    <span>TB Screening Provider View</span>
                   </a>
                   <a
                     href="/care-provider"
-                    title="TB care providers (treatment centres). Read+edit Care Referral Log."
-                    className="block w-full px-2 py-1 bg-gray-700/50 text-gray-200 text-[10px] font-medium rounded hover:bg-gray-700 text-center"
+                    title="TB care providers (treatment centres). Read+edit Care Referral Log + the TB-positive subset of the Screening Referral Log."
+                    className="flex items-center gap-2 w-full px-2 py-1 bg-gray-700/50 text-gray-200 text-[10px] font-medium rounded hover:bg-gray-700"
                   >
-                    TB Care Provider View
+                    <span className="text-base leading-none">🩺</span>
+                    <span>TB Care Provider View</span>
                   </a>
                 </div>
               </CollapsibleSection>

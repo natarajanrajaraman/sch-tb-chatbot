@@ -28,9 +28,9 @@ interface FieldConfig {
   options?: { value: string; label: string }[];
   // Roles that can edit this field. 'all' = every role.
   editableBy: UserRole[] | 'all';
-  // Role that considers this field "their" responsibility — shows the
-  // "Your action" highlight when that role is signed in.
-  primaryFor?: UserRole;
+  // Role(s) that consider this field "their" responsibility — show the
+  // amber "Your action" highlight when that role is signed in.
+  primaryFor?: UserRole | UserRole[];
   // For date fields: the role that gets a "Today" auto-fill button +
   // gentle prompt to stamp the date as today.
   autoStampFor?: UserRole;
@@ -140,7 +140,8 @@ const FIELDS: FieldConfig[] = [
     primaryFor: 'screening-provider',
   },
 
-  // Final diagnosis group — anyone can mark
+  // Final diagnosis group — anyone can mark; care provider considers
+  // these fields theirs (per Raj's care-provider UX spec).
   {
     key: 'patientDx', label: 'Patient Dx', col: 20,
     type: 'radio',
@@ -150,17 +151,20 @@ const FIELDS: FieldConfig[] = [
       { value: 'Pending', label: 'Pending' },
     ],
     editableBy: 'all',
+    primaryFor: ['care-provider'],
   },
   {
     key: 'tbRegistrationId', label: 'TB Registration ID', col: 21,
     type: 'text',
     editableBy: 'all',
+    primaryFor: ['care-provider'],
     visibleIf: v => v.patientDx === 'Confirmed TB +ve',
   },
   {
     key: 'tbRegistrationDate', label: 'TB Registration Date', col: 22,
     type: 'date',
     editableBy: 'all',
+    primaryFor: ['care-provider'],
     visibleIf: v => v.patientDx === 'Confirmed TB +ve',
   },
 
@@ -668,7 +672,10 @@ function FieldEditor({ field, userRole, editValues, setEditValues }: {
   setEditValues: React.Dispatch<React.SetStateAction<Record<string, string>>>;
 }) {
   const canEdit = isEditableBy(field, userRole);
-  const isYourResponsibility = field.primaryFor === userRole || field.autoStampFor === userRole;
+  const primaryMatch = Array.isArray(field.primaryFor)
+    ? field.primaryFor.includes(userRole)
+    : field.primaryFor === userRole;
+  const isYourResponsibility = primaryMatch || field.autoStampFor === userRole;
   const wrapperClass =
     field.type === 'textarea' ? 'md:col-span-2 lg:col-span-3' :
     field.type === 'radio' && (field.options?.length || 0) > 3 ? 'md:col-span-2' : '';
