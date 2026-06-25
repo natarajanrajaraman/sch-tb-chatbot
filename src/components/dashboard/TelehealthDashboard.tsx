@@ -179,10 +179,10 @@ export default function TelehealthDashboard({ screeningData, careData, alertsDat
         </div>
       )}
 
-      {/* Self-Check Outcome */}
+      {/* Screening Referral */}
       <div className="space-y-3">
         <OutcomeCards
-          title="Self-Check Outcome (TB Self-Check Tool referrals)"
+          title="Screening Referral"
           journeys={screeningJourneys}
           selectedBucket={scBucket}
           onBucketClick={setScBucket}
@@ -193,10 +193,10 @@ export default function TelehealthDashboard({ screeningData, careData, alertsDat
         />
       </div>
 
-      {/* Patient Support Outcome */}
+      {/* Care Referral */}
       <div className="space-y-3">
         <OutcomeCards
-          title="Patient Support Outcome (TB Patient Support Chatbot escalations)"
+          title="Care Referral"
           journeys={careJourneys}
           selectedBucket={psBucket}
           onBucketClick={setPsBucket}
