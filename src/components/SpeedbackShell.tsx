@@ -36,8 +36,10 @@ interface SpeedbackShellProps {
 const NAV_ITEMS = [
   { key: 'admin' as const, label: 'SCH Admin', icon: '🤓', href: '/admin' },
   { key: 'telehealth' as const, label: 'Tele-Health', icon: '🎧', href: '/telehealth' },
-  { key: 'screening-provider' as const, label: 'Screening Provider', icon: '🩻', href: '/screening-provider' },
-  { key: 'care-provider' as const, label: 'Care Provider', icon: '🩺', href: '/care-provider' },
+  // DISABLED 2026-07-01 per Raj — hidden from the interface. Routes + role logic kept;
+  // re-enable by uncommenting these two entries (and the matching links in app/page.tsx).
+  // { key: 'screening-provider' as const, label: 'Screening Provider', icon: '🩻', href: '/screening-provider' },
+  // { key: 'care-provider' as const, label: 'Care Provider', icon: '🩺', href: '/care-provider' },
 ];
 
 export default function SpeedbackShell({ title, subtitle, activeView, rightActions, search, children }: SpeedbackShellProps) {

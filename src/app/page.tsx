@@ -127,8 +127,12 @@ export default function Home() {
         <div className="text-[7px] uppercase tracking-wider text-slate-500 mb-1 font-semibold">Roles</div>
         <a href="/admin" title="SCH Admin View" className="w-10 h-10 flex items-center justify-center rounded-lg bg-slate-800/70 hover:bg-slate-700 text-lg leading-none">🤓</a>
         <a href="/telehealth" title="SCH Tele-Health View" className="w-10 h-10 flex items-center justify-center rounded-lg bg-slate-800/70 hover:bg-slate-700 text-lg leading-none">🎧</a>
+        {/* DISABLED 2026-07-01 per Raj — Screening Provider + Care Provider views hidden from the interface.
+            Routes, role logic and schemas are intact; re-enable by uncommenting these two links (and the
+            matching NAV_ITEMS entries in SpeedbackShell.tsx).
         <a href="/screening-provider" title="TB Screening Provider View" className="w-10 h-10 flex items-center justify-center rounded-lg bg-slate-800/70 hover:bg-slate-700 text-lg leading-none">🩻</a>
         <a href="/care-provider" title="TB Care Provider View" className="w-10 h-10 flex items-center justify-center rounded-lg bg-slate-800/70 hover:bg-slate-700 text-lg leading-none">🩺</a>
+        */}
       </aside>
 
       {/* CENTER: Clean device mockup + floating restart button below */}
