@@ -8,6 +8,42 @@ the rationale. When KZ's reply lands, **move the item to the
 
 ---
 
+## 2026-07-10 — Status update (post-KZ weekly)
+
+Following the ETCxSCH weekly catch-up on 2026-07-10, the resolution
+path for the items below has shifted:
+
+- **Pilot phase now the primary track.** SCH has 7 tester groups
+  (QI / Training / Tele-Health / Program Mx / Operations) exercising
+  Self-Check + Chatbot + Back-end. Answers to many of the questions
+  below will surface **bottom-up** through the in-prototype Feedback
+  panel + KZ's aggregation — no longer top-down via KZ walkthroughs.
+- **Walkthrough rhythm retired.** The plan to walk KZ through this
+  doc line-by-line at weekly catch-ups is over. New rhythm: SCH
+  testers exercise the prototype → feedback lands (Feedback panel /
+  NoMs / email / Slack) → items below are closed as feedback resolves
+  them → any residual items get a targeted walkthrough only if
+  needed. Raj's ETC rollout team (Yvonne, Kodi, Chai) will be looped
+  in for the pilot planning.
+- **Prototype migration path locked.** Back-end views (SCH Admin +
+  SCH Tele-Health only) are being ported onto the **Speedback
+  platform** (`sandbox.speedback.com`) — demo target: next 1-2
+  ETCxSCH weekly catch-ups. **Viber front-end** port is in build —
+  demo target: next 1-2 weeks. Screening Provider + Care Provider
+  back-end views stay hidden (`SpeedbackShell.tsx` v1.7.1 disable)
+  and are not being ported.
+- **What KZ still owes** (from 23 Jun NoMs, now 3 weeks open):
+  "what does this mean" elaboration on Qs, Service Referral
+  Directory, Q23 exact list of screening questions. Bound to the
+  feedback loop; if not surfaced by 17 Jul, chase directly.
+- **Prioritisation reminder for the definitive-build team.** Items
+  in **§7 Tele-Health contact placeholders** and **§3 Tele-Health
+  SLA** unblock user-facing testing on real content — highest-value
+  to close first. **§4 bilingual review** is the Phase B gate. **§6
+  v1.5 SLA thresholds** is calibration, not a blocker.
+
+---
+
 ## Open
 
 ### 1. Pediatric pass — built, needs SCH sign-off

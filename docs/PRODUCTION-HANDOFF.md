@@ -14,6 +14,66 @@
 > Keep this file updated **in the same commit** as any behaviour change,
 > so the "definitive build" team always inherits a current spec.
 
+## 0. Current status — 2026-07-10 (post-KZ weekly)
+
+**Phase.** SCH pilot testing phase greenlit at the ETCxSCH weekly on
+2026-07-10. Seven SCH tester groups (QI, Training, Tele-Health,
+Program Mx, Operations) are now exercising Self-Check + Chatbot +
+Back-end. ETC-side rollout team looping in: **Yvonne Lim** (Product
+Ops, learning project), **Kodi Khau** (Product Ops & Partnership
+Support), **Chaitanya "Chai" Baranwal** (Eng Tech Lead).
+
+**Prototype migration path — locked.**
+
+- **Back-end views** — porting onto the **Speedback platform**
+  (`sandbox.speedback.com`). Demo target: next 1-2 ETCxSCH weekly
+  catch-ups. Only **SCH Admin** + **SCH Tele-Health** views survive
+  to the port; **Screening Provider** + **Care Provider** views
+  (already hidden in v1.8.1 — see the `DISABLED 2026-07-01` tags in
+  `SpeedbackShell.tsx` and `app/page.tsx`) stay hidden and are **not**
+  being ported.
+- **Client-facing front-end** — porting from the web-prototype device
+  skin to the **Viber Bot API**. Demo target: next 1-2 weeks.
+- **This Vercel prototype's role** — remains the SCH-facing
+  validation surface until the Speedback + Viber ports catch up.
+  The device-skin toggle, the mock-auth back-end pages, and the
+  React admin dashboards will retire as their production
+  equivalents come online.
+
+**Engineering roadmap posture.**
+
+- **Phase B (RAG ingestion) — on hold** until SCH pilot testing
+  surfaces prompt-quality gaps that the current v0.9 inline
+  curated-context system prompt cannot cover. The inline-context
+  approach is enough for SCH testers to click through and evaluate;
+  RAG only pays off once we know the KB gaps and have a
+  bilingual-review pipeline in place. See [KZ-DISCUSSION-POINTS §4](./KZ-DISCUSSION-POINTS.md#4-bilingual-kb-content-review-capacity-phase-b-precondition)
+  for the SCH-clinician + Wa Thone review dependency.
+- **Speedback back-end port** + **Viber front-end port** are the
+  near-term engineering lines. Both are being scoped by Chai + the
+  Speedback team; not tracked in this repo's changelog because they
+  land in different repositories.
+- **Feedback aggregation** across the four channels (in-prototype
+  Feedback panel + SCH NoMs + email + Slack) is an open ops
+  question — see the P2 GTask `ETC - SCH FC-SDS (TB Project)` NAs
+  for the current placeholder.
+
+**Micro Assessment Form status.** SCH DD compliance form was sent
+back to KZ on 3 Jul with NAs on non-applicable sections; KZ did not
+raise it at the 10 Jul catch-up. Default posture: closed unless SCH's
+contracting team surfaces concerns by 17 Jul.
+
+**What the definitive-build team should read first** if joining now:
+
+1. This §0 (state).
+2. [§1](#1-versions-and-changelog) (changelog) for the delta since v0.9.
+3. [`KZ-DISCUSSION-POINTS.md`](./KZ-DISCUSSION-POINTS.md) —
+   read the top status note, then the items still binding on
+   production behaviour (§3 SLA, §4 bilingual review, §7 Tele-Health
+   contact placeholders).
+
+---
+
 ## 1. Versions and changelog
 
 | Version | Date       | Highlights                                                                                                                |
