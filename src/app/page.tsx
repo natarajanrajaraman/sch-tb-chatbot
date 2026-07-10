@@ -6,8 +6,9 @@ import TranslationPanel from '@/components/TranslationPanel';
 import FeedbackPanel from '@/components/FeedbackPanel';
 import WorkflowFlowchart from '@/components/WorkflowFlowchart';
 import CollapsibleSection from '@/components/CollapsibleSection';
-import P3ChatPanel, { P3UsageSnapshot, P3Msg } from '@/components/p3/P3ChatPanel';
+import P3ChatPanel, { P3UsageSnapshot, P3Msg, P3RetrievedChunkInfo } from '@/components/p3/P3ChatPanel';
 import P3CostMeter from '@/components/p3/P3CostMeter';
+import P3RetrievedChunks from '@/components/p3/P3RetrievedChunks';
 import P3DocLinks from '@/components/p3/P3DocLinks';
 import P3SystemPromptEditor from '@/components/p3/P3SystemPromptEditor';
 import P3KbLinks from '@/components/p3/P3KbLinks';
@@ -51,6 +52,8 @@ export default function Home() {
     escalationsCount: 0,
     careReferralIds: [],
   });
+  // v1.9.1 — last-turn RAG retrieval, surfaced in the dev panel.
+  const [p3Retrieved, setP3Retrieved] = useState<P3RetrievedChunkInfo[]>([]);
 
   const theme = PLATFORM_THEMES[platform];
 
@@ -99,6 +102,7 @@ export default function Home() {
     setSession(newSession);
     setConversationState('LANDING');
     setMessages([getWelcomeMessage()]);
+    setP3Retrieved([]);
     setP3ResetSignal(s => s + 1);
   }, [platform]);
 
@@ -155,6 +159,7 @@ export default function Home() {
               systemPromptOverride={p3SystemPromptOverride}
               onUsageChange={setP3Usage}
               onMessagesChange={setP3Messages}
+              onRetrievedChange={setP3Retrieved}
               onResetSignal={p3ResetSignal}
             />
           ) : (
@@ -254,6 +259,15 @@ export default function Home() {
                     onReset={() => setP3ResetSignal(s => s + 1)}
                     visible={true}
                   />
+                </CollapsibleSection>
+              )}
+
+              {/* v1.9.1 — RAG retrieval widget for P3 mode. Renders what
+                  the LLM was grounded on this turn (source titles,
+                  cosine similarity, chunk previews). */}
+              {isP3Mode && (
+                <CollapsibleSection title="P3 RAG retrieval" defaultOpen={true}>
+                  <P3RetrievedChunks chunks={p3Retrieved} />
                 </CollapsibleSection>
               )}
 

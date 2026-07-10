@@ -28,6 +28,17 @@ interface P3UsageSnapshot {
   careReferralIds: string[];
 }
 
+// v1.9.1 — what the retrieval layer returned on the last turn. The dev
+// panel widget renders this so testers can see what the LLM was
+// grounded on without opening the Network tab.
+export interface P3RetrievedChunkInfo {
+  tag: string;                 // 'S1', 'S2', ...
+  sourceTitle: string;
+  sourceUrl: string | null;
+  similarity: number;
+  preview: string;
+}
+
 interface P3ChatPanelProps {
   theme: PlatformTheme;
   modelId: string;
@@ -35,10 +46,11 @@ interface P3ChatPanelProps {
   systemPromptOverride?: string | null;
   onUsageChange: (usage: P3UsageSnapshot) => void;
   onMessagesChange?: (messages: P3Msg[]) => void;
+  onRetrievedChange?: (chunks: P3RetrievedChunkInfo[]) => void;
   onResetSignal?: number;     // bump to reset the conversation
 }
 
-export default function P3ChatPanel({ theme, modelId, platformView, systemPromptOverride, onUsageChange, onMessagesChange, onResetSignal }: P3ChatPanelProps) {
+export default function P3ChatPanel({ theme, modelId, platformView, systemPromptOverride, onUsageChange, onMessagesChange, onRetrievedChange, onResetSignal }: P3ChatPanelProps) {
   const [p3ConversationId, setP3ConversationId] = useState(() => `P3-${generateId()}`);
   const [messages, setMessages] = useState<P3Msg[]>([]);
   const [inputText, setInputText] = useState('');
@@ -158,6 +170,13 @@ export default function P3ChatPanel({ theme, modelId, platformView, systemPrompt
         careReferralId: data.escalation?.careReferralId,
       };
       setMessages(prev => [...prev, replyMsg]);
+
+      // v1.9.1 — bubble the RAG retrieval up so the dev panel can
+      // render what the LLM was grounded on this turn.
+      if (onRetrievedChange) {
+        const retrieved: P3RetrievedChunkInfo[] = Array.isArray(data.retrieved) ? data.retrieved : [];
+        onRetrievedChange(retrieved);
+      }
 
       // Snapshot the full message list including the brand-new reply so the
       // transcript save below doesn't race the state setter.
