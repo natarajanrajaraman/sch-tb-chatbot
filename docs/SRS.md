@@ -190,12 +190,56 @@ Notable:
 ## 9. Out of scope (deferred to production)
 
 - Production-grade auth (Workspace SSO or similar).
-- Real database with retention policy + audit log.
+- Real database with retention policy + audit log — beyond the Supabase pgvector KB used for RAG.
 - Caregiver mode (spec §2.8 — single endpoint, configurable patient/caregiver target).
 - LPK case manager CC for DR-TB escalations.
-- Phase-B RAG corpus ingestion for P3 (currently inline summary in the system prompt).
 - Pediatric DR-TB content.
 - Full WCAG accessibility pass.
+
+## 9a. Phase B — Retrieval-Augmented Generation (RAG) — shipped v1.9.0
+
+The P3 chatbot is grounded on **KZ's six-PDF corpus** stored as
+embeddings in Supabase pgvector. Every P3 chat turn embeds the
+user's message (with the last two user turns for context),
+retrieves the top-6 semantically similar chunks, and splices them
+into the system prompt with citation tags `[S1]…[S6]`. The LLM
+is instructed to cite when its reply draws on the retrieved
+content. If Supabase is unreachable or the table is empty, the
+chat gracefully falls back to the inline summary in
+`docs/p3-system-prompt.md` — the bot never breaks because RAG
+is unavailable.
+
+**Corpus:** six PDFs, sourced from KZ's canonical index doc
+(`1E-ePDB3tvcXwfH0-oKJQ8yjcJQ7eNTQiTSYrHhoD39c` on the SCH shared
+drive, 27 May 2026). Machine-readable IDs in
+`workspace-etc/reference/projects/sch-fc-sds-tb-folder-map.json →
+referenceLibrary.pdfs`. In priority order:
+
+1. WHO Op Handbook Module 4 — Treatment and Care 2025 (primary anchor for adherence/counselling).
+2. WHO Consolidated Guidelines Module 4 — companion recommendations.
+3. Myanmar NTP DR-TB v5.2.3 draft — local DR-TB context.
+4. CDC TB Q&A booklet — FAQ patterns.
+5. WHO Op Handbook Module 2 — Screening (cross-P1/P3).
+6. WHO Consolidated Guidelines Module 1 — Prevention/TPT.
+
+**Stack:**
+
+- **Vector DB:** Supabase pgvector on the personal account (personal Vercel + GitHub already; migration to ETC-owned infra deferred). Free tier — 500 MB DB, comfortably fits the ~350 chunks the corpus produces at 1000-token chunks with 200-token overlap.
+- **Embeddings:** OpenAI `text-embedding-3-small` (1536 dims). ~$0.02 per million tokens; full corpus re-ingest is a few cents.
+- **Table:** `kb_chunks (id, source_id, source_title, source_url, page_number, section, content, embedding vector(1536), metadata jsonb, created_at)`. HNSW index on `embedding` with cosine ops. RLS enabled — service-role key bypasses it, anon key is locked out.
+- **Retrieval RPC:** `match_kb_chunks(query_embedding, match_count, min_similarity)` returns rows ranked by cosine similarity above the threshold.
+- **Ingestion:** `scripts/ingest-kb.js` runs LOCALLY. Downloads each PDF from Drive via `gog drive download` (uses Raj's OAuth), extracts text with `pdf-parse`, chunks with paragraph/sentence-aware boundaries, embeds in batches of 20, upserts to `kb_chunks` (deletes prior rows for the same `source_id` first — idempotent). Runs in ~1–3 minutes per full corpus.
+- **Runtime helper:** `src/lib/p3/rag.ts` — `retrieveKbChunks()` and `formatChunksForPrompt()`. Never throws; empty array on any failure.
+- **Chat wiring:** `src/app/api/p3/chat/route.ts` calls the retrieval before the OpenRouter call and appends the formatted chunk block to the system prompt. Response includes a `retrieved` field with source titles + similarity scores + previews so the dev panel can surface what the LLM was grounded on.
+
+**Open follow-ups (v1.9.1+):**
+
+- Dev-panel widget rendering the `retrieved` block per turn.
+- Per-chunk page numbers (`pdf-parse` gives us the doc-level text; per-page extraction needs `pdfjs-dist` or `pdf2json`).
+- Section extraction (heading-aware chunking) for better citations.
+- DS-TB vs DR-TB index split — currently one shared index; add a `pathway` metadata tag when the corpus grows.
+- Burmese-language KB coverage — the Myanmar NTP portal has EN + MY content; only the DR-TB EN draft is currently ingested. KZ discussion point §4.
+- Curated FAQ layer (Phase C) — 50–100 hand-written QA pairs SCH-clinician-reviewed for the highest-frequency questions.
 
 ## 10. Open questions
 

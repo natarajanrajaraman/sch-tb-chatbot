@@ -4,6 +4,7 @@ import { findModel, DEFAULT_MODEL_ID, estimateCostUsd } from '@/lib/p3/models';
 import { getSystemPrompt } from '@/lib/p3/loadDocs';
 import { parseEscalationTag, ruleBasedPreCheck, maxLevel, EscalationLevel } from '@/lib/p3/escalation';
 import { saveCareReferralLog, saveAlertLog } from '@/lib/googleSheets';
+import { retrieveKbChunks, formatChunksForPrompt } from '@/lib/p3/rag';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -34,9 +35,27 @@ export async function POST(request: NextRequest) {
     // Rule-based pre-check on the user's latest message
     const preCheck = ruleBasedPreCheck(body.userMessage);
 
+    // v1.9.0 — RAG retrieval. Grounds the reply in KZ's 6-PDF KB.
+    // Falls back to the inline system-prompt summary when Supabase is
+    // unreachable or the table is empty — the bot never breaks
+    // because RAG is unavailable.
+    const recentUserTurns = body.history
+      .filter(h => h.role === 'user')
+      .slice(-2)
+      .map(h => h.content);
+    const kbChunks = await retrieveKbChunks(body.userMessage, {
+      topK: 6,
+      recentTurns: recentUserTurns,
+    });
+    const kbBlock = formatChunksForPrompt(kbChunks);
+
+    const systemContent = kbBlock
+      ? `${sysPrompt}\n\n${kbBlock}`
+      : sysPrompt;
+
     // Build the OpenRouter call
     const messages: P3ChatMessage[] = [
-      { role: 'system', content: sysPrompt },
+      { role: 'system', content: systemContent },
       ...body.history.map(h => ({ role: h.role, content: h.content })),
       { role: 'user', content: body.userMessage },
     ];
@@ -126,6 +145,15 @@ export async function POST(request: NextRequest) {
       model: result.model,
       estCostUsd,
       finishReason: result.finishReason,
+      // v1.9.0 — expose retrieved chunks so the dev panel can display
+      // what the LLM was grounded on this turn (source + similarity).
+      retrieved: kbChunks.map(c => ({
+        tag: `S${kbChunks.indexOf(c) + 1}`,
+        sourceTitle: c.sourceTitle,
+        sourceUrl: c.sourceUrl,
+        similarity: Number(c.similarity.toFixed(3)),
+        preview: c.content.slice(0, 220),
+      })),
     });
   } catch (err) {
     console.error('P3 chat endpoint error:', err);

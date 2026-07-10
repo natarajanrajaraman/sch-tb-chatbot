@@ -1,6 +1,6 @@
 {
   "name": "sch-tb-chatbot",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -9,17 +9,21 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.58.0",
     "googleapis": "^172.0.0",
     "next": "16.2.5",
     "openai": "^6.45.0",
+    "pdf-parse": "^1.1.1",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/pdf-parse": "^1.1.5",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "dotenv": "^17.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.5",
     "tailwindcss": "^4",
