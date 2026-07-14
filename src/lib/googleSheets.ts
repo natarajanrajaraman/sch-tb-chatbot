@@ -27,6 +27,18 @@ export async function appendToSheet(sheetName: string, values: string[][]): Prom
     spreadsheetId: SPREADSHEET_ID,
     range: `${sheetName}!A:Z`,
     valueInputOption: 'RAW',
+    // v1.8.2 — insertDataOption INSERT_ROWS (was the API default OVERWRITE).
+    // With OVERWRITE, `values.append` computes the target row by detecting the
+    // last row of the table and then writes there. Two writes that race (e.g.
+    // a tester submitting feedback twice in quick succession, or overlapping
+    // in-flight requests) both detect the SAME last row and both write to
+    // last+1 — the second silently clobbers the first, so one row is lost.
+    // INSERT_ROWS physically inserts a fresh row per write, so concurrent
+    // appends can never collide on the same index and nothing is overwritten.
+    // Applies to every append-only tab here (Feedback, Self-Check Log,
+    // referral/alerts logs, etc.), all of which are pure logs with no data
+    // below the table for the insert to disturb.
+    insertDataOption: 'INSERT_ROWS',
     requestBody: { values },
   });
 
